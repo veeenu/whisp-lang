@@ -18,14 +18,15 @@ function_declaration = ${
 
 visibility_modifier = @{ "pub" }
 
-identifier = @{ (ASCII_ALPHANUMERIC | "_") }
+identifier = @{ (ASCII_ALPHANUMERIC | "_")+ }
 
-formal_parameters = { "(" ~ ")" }
+formal_parameters = { "(" ~ WHITESPACE* ~ ")" }
+
 
 statement_block = {
-  "{" ~
-  (statement ~ ";") ~
-  statement? ~
+  "{" ~ WHITESPACE* ~
+  (statement ~ WHITESPACE* ~ ";" ~ WHITESPACE*)* ~ 
+  statement? ~ WHITESPACE* ~
   "}"
 }
 
@@ -47,10 +48,10 @@ function_call = ${
 }
 
 argument = ${
-  string | statement
+  identifier | string | statement_block
 }
 
-string = ${
-  (!WHITESPACE+) |
+string = @{
+  ((!WHITESPACE ~ ANY)+) |
   ("\"" ~ (!("\"") ~ ANY)* ~ "\"")
 }

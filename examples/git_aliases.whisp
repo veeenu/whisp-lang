@@ -1,3 +1,8 @@
+pub fn grom() {
+  gpm;
+  run git rebase origin main;
+}
+
 pub fn gpm() {
   let cur_branch = { run git branch --show-current };
   run git checkout main;
@@ -6,7 +11,3 @@ pub fn gpm() {
   run git checkout { cur_branch };
 }
 
-pub fn grom() {
-  gpm;
-  run git rebase origin main;
-}
