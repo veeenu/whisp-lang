@@ -1,0 +1,12 @@
+pub fn gpm() {
+  let cur_branch = { run git branch --show-current };
+  run git checkout main;
+  run git fetch;
+  run git pull;
+  run git checkout { cur_branch };
+}
+
+pub fn grom() {
+  gpm;
+  run git rebase origin main;
+}

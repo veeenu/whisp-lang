@@ -1,0 +1,56 @@
+program = _{
+  SOI ~ 
+  WHITESPACE* ~ 
+  function_declaration* ~ 
+  WHITESPACE* ~ 
+  EOI
+}
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+function_declaration = ${
+  (visibility_modifier ~ WHITESPACE+)? ~
+  "fn" ~ WHITESPACE+ ~
+  identifier ~ WHITESPACE* ~
+  formal_parameters ~ WHITESPACE* ~
+  statement_block
+}
+
+visibility_modifier = @{ "pub" }
+
+identifier = @{ (ASCII_ALPHANUMERIC | "_") }
+
+formal_parameters = { "(" ~ ")" }
+
+statement_block = {
+  "{" ~
+  (statement ~ ";") ~
+  statement? ~
+  "}"
+}
+
+statement = {
+  lexical_declaration |
+  function_call |
+  statement_block
+}
+
+lexical_declaration = ${
+  "let" ~ WHITESPACE+ ~
+  identifier ~ WHITESPACE* ~
+  "=" ~ WHITESPACE* ~
+  statement
+}
+
+function_call = ${
+  identifier ~ (WHITESPACE+ ~ argument)*
+}
+
+argument = ${
+  string | statement
+}
+
+string = ${
+  (!WHITESPACE+) |
+  ("\"" ~ (!("\"") ~ ANY)* ~ "\"")
+}
