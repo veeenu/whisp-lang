@@ -48,26 +48,25 @@ mod tests {
     }
 
     #[test]
+    fn test_single_statement() {
+        parse(Rule::statement, r#"cur_branch"#);
+        parse(Rule::statement, r#" cur_branch "#);
+        parse(Rule::statement, r#"run git checkout main"#);
+        parse(Rule::statement, r#" run git checkout main "#);
+    }
+
+    #[test]
     fn test_statement_block() {
         // Single terminal function call statements on a single line
         parse(Rule::statement_block, r#"{cur_branch}"#);
+        parse(Rule::statement_block, r#"{run git checkout main}"#);
         parse(Rule::statement_block, r#"{ cur_branch }"#);
         parse(Rule::statement_block, r#"{ run git checkout main }"#);
         // Non-terminal function call statement on a single line
+        parse(Rule::statement_block, r#"{cur_branch;}"#);
+        parse(Rule::statement_block, r#"{run git checkout main;}"#);
+        parse(Rule::statement_block, r#"{ cur_branch; }"#);
         parse(Rule::statement_block, r#"{ run git checkout main; }"#);
-        // Function call statement on multiple lines
-        parse(
-            Rule::statement_block,
-            r#"{ 
-              cur_branch 
-            }"#,
-        );
-        parse(
-            Rule::statement_block,
-            r#"{ 
-              cur_branch 
-            }"#,
-        );
     }
 
     // #[test]

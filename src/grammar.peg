@@ -22,18 +22,13 @@ identifier = @{ (ASCII_ALPHANUMERIC | "_")+ }
 
 formal_parameters = { "(" ~ WHITESPACE* ~ ")" }
 
-
-statement_block = {
-  "{" ~ WHITESPACE* ~
-  (statement ~ WHITESPACE* ~ ";" ~ WHITESPACE*)* ~ 
-  statement? ~ WHITESPACE* ~
-  "}"
+statement_block = !{
+  "{" ~ (statement ~ ";")* ~ statement? ~ "}"
 }
 
-statement = {
-  lexical_declaration |
-  function_call |
-  statement_block
+statement = !{
+  // lexical_declaration | function_call | statement_block
+  lexical_declaration | function_call
 }
 
 lexical_declaration = ${
@@ -44,14 +39,13 @@ lexical_declaration = ${
 }
 
 function_call = ${
-  identifier ~ (WHITESPACE+ ~ argument)*
+  (identifier ~ (WHITESPACE+ ~ argument)*)
 }
 
-argument = ${
-  identifier | string | statement_block
+argument = {
+  string | identifier | statement_block
 }
 
-string = @{
-  ((!WHITESPACE ~ ANY)+) |
-  ("\"" ~ (!("\"") ~ ANY)* ~ "\"")
-}
+string = @{ quoted_string /*| unquoted_string*/ }
+unquoted_string = _{ (!WHITESPACE ~ ANY)+ }
+quoted_string = _{ ("\"" ~ (!("\"") ~ ANY)* ~ "\"") }
