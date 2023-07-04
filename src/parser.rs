@@ -1,4 +1,3 @@
-use pest::Parser;
 use pest_derive::Parser;
 
 #[derive(Parser)]
@@ -8,6 +7,7 @@ pub struct WhispParser;
 #[cfg(test)]
 mod tests {
     use pest::iterators::Pairs;
+    use pest::Parser;
 
     use super::*;
 
@@ -16,12 +16,21 @@ mod tests {
     fn print_tree(pairs: Pairs<'_, Rule>, indent: usize) {
         for pair in pairs {
             let rule = format!("{:?}", pair.as_rule());
-            let text = pair.as_str();
+            let text = {
+                let text = pair.as_str();
+                if text.contains('\n') {
+                    format!("{}...", text.lines().next().unwrap())
+                } else {
+                    text.to_string()
+                }
+            };
+
             for _ in 0..indent {
                 print!("  ");
             }
             print!("\x1b[34;1m{rule}\x1b[0m");
-            for _ in 0..(32 - indent * 2 - rule.len()) {
+            let columns = rule.len() + indent * 2;
+            for _ in 0..(32usize.saturating_sub(columns)) {
                 print!(" ");
             }
             println!("{text}");
@@ -35,7 +44,7 @@ mod tests {
             Err(e) => {
                 eprintln!("{e}");
                 panic!();
-            }
+            },
         }
     }
 
@@ -45,6 +54,7 @@ mod tests {
         parse(Rule::string, r#""another string""#);
         parse(Rule::string, r#"another_string"#);
         parse(Rule::string, r#"another_string!_no,-seriously"#);
+        parse(Rule::string, "r#\"I am a raw string!!!{};\"#");
     }
 
     #[test]
@@ -56,22 +66,83 @@ mod tests {
     }
 
     #[test]
+    fn test_lexical_declaration() {
+        parse(Rule::lexical_declaration, "let foo = bar");
+        parse(Rule::lexical_declaration, r#"let foo = "string""#);
+        parse(Rule::lexical_declaration, r#"let foo = { bar; foo }"#);
+        parse(Rule::lexical_declaration, r#"let foo = let bar = baz"#);
+    }
+
+    #[test]
+    fn test_function_call() {
+        parse(Rule::function_call, r#"run git checkout { cur_branch }"#);
+        parse(Rule::function_call, r#"run git "checkout" { cur_branch }"#);
+        parse(Rule::function_call, "run git r#\"checkout\"# { cur_branch }");
+    }
+
+    #[test]
     fn test_statement_block() {
-        // Single terminal function call statements on a single line
-        parse(Rule::statement_block, r#"{cur_branch}"#);
-        parse(Rule::statement_block, r#"{run git checkout main}"#);
-        parse(Rule::statement_block, r#"{ cur_branch }"#);
-        parse(Rule::statement_block, r#"{ run git checkout main }"#);
         // Non-terminal function call statement on a single line
         parse(Rule::statement_block, r#"{cur_branch;}"#);
         parse(Rule::statement_block, r#"{run git checkout main;}"#);
         parse(Rule::statement_block, r#"{ cur_branch; }"#);
         parse(Rule::statement_block, r#"{ run git checkout main; }"#);
+        // Single terminal function call statements on a single line
+        parse(Rule::statement_block, r#"{cur_branch}"#);
+        parse(Rule::statement_block, r#"{run git checkout main}"#);
+        parse(Rule::statement_block, r#"{ run git checkout main }"#);
+        parse(Rule::statement_block, r#"{ cur_branch }"#);
+        parse(Rule::statement_block, r#"{ fn foo() {} }"#);
+        parse(Rule::statement_block, r#"{ fn foo() {} fn bar() {} foo; bar }"#);
     }
 
-    // #[test]
-    // fn test_load_grammar() {
-    //     let res = WhispParser::parse(Rule::program, SAMPLE1);
-    //     println!("{res:#?}");
-    // }
+    #[test]
+    fn test_formal_parameters() {
+        parse(Rule::formal_parameters, r#"()"#);
+        parse(Rule::formal_parameters, r#"(foo)"#);
+        parse(Rule::formal_parameters, r#"(foo,)"#);
+        parse(Rule::formal_parameters, r#"( foo, )"#);
+        parse(Rule::formal_parameters, r#"(foo, bar, baz)"#);
+        parse(Rule::formal_parameters, r#"(foo, bar, baz,)"#);
+    }
+
+    #[test]
+    fn test_function_declaration() {
+        parse(
+            Rule::function_declaration,
+            r#"
+            fn grom() {
+              fn gpm;
+              pub fn gpm;
+
+              pub fn other_fn() {
+                  foo;
+              }
+
+              run git rebase origin main;
+            }
+            "#,
+        );
+        parse(
+            Rule::function_declaration,
+            r#"
+            pub fn grom() {
+              gpm;
+              fn gpm;
+              pub fn gpm;
+
+              pub fn other_fn() {
+                  foo;
+              }
+
+              run git rebase origin main;
+            }
+            "#,
+        );
+    }
+
+    #[test]
+    fn test_program() {
+        parse(Rule::program, SAMPLE1);
+    }
 }

@@ -1,18 +1,14 @@
-program = _{
+program = {
   SOI ~ 
-  WHITESPACE* ~ 
   function_declaration* ~ 
-  WHITESPACE* ~ 
-  EOI
+  EOI 
 }
 
-WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
-
-function_declaration = ${
-  (visibility_modifier ~ WHITESPACE+)? ~
-  "fn" ~ WHITESPACE+ ~
-  identifier ~ WHITESPACE* ~
-  formal_parameters ~ WHITESPACE* ~
+function_declaration = {
+  visibility_modifier? ~
+  "fn" ~
+  identifier ~
+  formal_parameters ~
   statement_block
 }
 
@@ -20,32 +16,35 @@ visibility_modifier = @{ "pub" }
 
 identifier = @{ (ASCII_ALPHANUMERIC | "_")+ }
 
-formal_parameters = { "(" ~ WHITESPACE* ~ ")" }
+formal_parameters = { "(" ~ (identifier ~ ",")* ~ (identifier ~ ","?)? ~ ")" }
 
-statement_block = !{
-  "{" ~ (statement ~ ";")* ~ statement? ~ "}"
+statement_block = {
+  "{" ~ (function_declaration | (statement ~ ";"))* ~ statement? ~ "}"
 }
 
-statement = !{
-  // lexical_declaration | function_call | statement_block
-  lexical_declaration | function_call
+statement = {
+  function_declaration | lexical_declaration | function_call | string
 }
 
-lexical_declaration = ${
-  "let" ~ WHITESPACE+ ~
-  identifier ~ WHITESPACE* ~
-  "=" ~ WHITESPACE* ~
-  statement
+lexical_declaration = {
+  "let" ~ identifier ~ "=" ~ (statement | statement_block)
 }
 
-function_call = ${
-  (identifier ~ (WHITESPACE+ ~ argument)*)
+function_call = {
+  (identifier ~ argument*)
 }
 
-argument = {
-  string | identifier | statement_block
+argument = _{
+  string | statement_block
 }
 
-string = @{ quoted_string /*| unquoted_string*/ }
-unquoted_string = _{ (!WHITESPACE ~ ANY)+ }
-quoted_string = _{ ("\"" ~ (!("\"") ~ ANY)* ~ "\"") }
+string = ${ quoted_string_block | raw_quoted_string_block | unquoted_string }
+quoted_string_block = _{ ("\"" ~ quoted_string ~ "\"") }
+quoted_string = { (!("\"") ~ ANY)* }
+raw_quoted_string_block = _{ "r#\"" ~ raw_quoted_string ~ "\"#"}
+raw_quoted_string = { (!("\"#") ~ ANY)* }
+unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+RESERVED = _{";" | "{" | "}" | "\""}
+
