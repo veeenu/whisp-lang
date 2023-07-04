@@ -8,8 +8,8 @@ WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 RESERVED = _{";" | "{" | "}" | "\""}
 
 function_declaration = {
-  (visibility_modifier ~ WHITESPACE+)? ~
-  "fn" ~ WHITESPACE+ ~
+  visibility_modifier? ~
+  "fn" ~
   identifier ~
   formal_parameters ~
   statement_block
@@ -19,14 +19,14 @@ visibility_modifier = @{ "pub" }
 
 identifier = @{ (ASCII_ALPHANUMERIC | "_")+ }
 
-formal_parameters = { "(" ~ ")" }
+formal_parameters = { "(" ~ (identifier ~ ",")* ~ (identifier ~ ","?)? ~ ")" }
 
 statement_block = {
-  "{" ~ (statement ~ ";")* ~ statement? ~ "}"
+  "{" ~ (function_declaration | (statement ~ ";"))* ~ statement? ~ "}"
 }
 
 statement = {
-  lexical_declaration | function_call 
+  function_declaration | lexical_declaration | function_call
 }
 
 lexical_declaration = {

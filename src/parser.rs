@@ -16,7 +16,15 @@ mod tests {
     fn print_tree(pairs: Pairs<'_, Rule>, indent: usize) {
         for pair in pairs {
             let rule = format!("{:?}", pair.as_rule());
-            let text = pair.as_str();
+            let text = {
+                let text = pair.as_str();
+                if text.contains('\n') {
+                    format!("{}...", text.lines().next().unwrap())
+                } else {
+                    text.to_string()
+                }
+            };
+
             for _ in 0..indent {
                 print!("  ");
             }
@@ -71,6 +79,51 @@ mod tests {
         parse(Rule::statement_block, r#"{run git checkout main}"#);
         parse(Rule::statement_block, r#"{ run git checkout main }"#);
         parse(Rule::statement_block, r#"{ cur_branch }"#);
+    }
+
+    #[test]
+    fn test_formal_parameters() {
+        parse(Rule::formal_parameters, r#"()"#);
+        parse(Rule::formal_parameters, r#"(foo)"#);
+        parse(Rule::formal_parameters, r#"(foo,)"#);
+        parse(Rule::formal_parameters, r#"( foo, )"#);
+        parse(Rule::formal_parameters, r#"(foo, bar, baz)"#);
+        parse(Rule::formal_parameters, r#"(foo, bar, baz,)"#);
+    }
+
+    #[test]
+    fn test_function_declaration() {
+        parse(
+            Rule::function_declaration,
+            r#"
+            fn grom() {
+              fn gpm;
+              pub fn gpm;
+
+              pub fn other_fn() {
+                  foo;
+              }
+
+              run git rebase origin main;
+            }
+            "#,
+        );
+        parse(
+            Rule::function_declaration,
+            r#"
+            pub fn grom() {
+              gpm;
+              fn gpm;
+              pub fn gpm;
+
+              pub fn other_fn() {
+                  foo;
+              }
+
+              run git rebase origin main;
+            }
+            "#,
+        );
     }
 
     #[test]
