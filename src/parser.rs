@@ -57,21 +57,21 @@ mod tests {
 
     #[test]
     fn test_statement_block() {
-        // Single terminal function call statements on a single line
-        parse(Rule::statement_block, r#"{cur_branch}"#);
-        parse(Rule::statement_block, r#"{run git checkout main}"#);
-        parse(Rule::statement_block, r#"{ cur_branch }"#);
-        parse(Rule::statement_block, r#"{ run git checkout main }"#);
         // Non-terminal function call statement on a single line
         parse(Rule::statement_block, r#"{cur_branch;}"#);
         parse(Rule::statement_block, r#"{run git checkout main;}"#);
         parse(Rule::statement_block, r#"{ cur_branch; }"#);
         parse(Rule::statement_block, r#"{ run git checkout main; }"#);
+        // Single terminal function call statements on a single line
+        parse(Rule::statement_block, r#"{cur_branch}"#);
+        parse(Rule::statement_block, r#"{run git checkout main}"#);
+        parse(Rule::statement_block, r#"{ run git checkout main }"#);
+        parse(Rule::statement_block, r#"{ cur_branch }"#);
     }
 
-    // #[test]
-    // fn test_load_grammar() {
-    //     let res = WhispParser::parse(Rule::program, SAMPLE1);
-    //     println!("{res:#?}");
-    // }
+    #[test]
+    fn test_load_grammar() {
+        let res = WhispParser::parse(Rule::program, SAMPLE1);
+        println!("{res:#?}");
+    }
 }
