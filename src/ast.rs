@@ -4,6 +4,7 @@ use thiserror::Error;
 use crate::parser::*;
 
 type Pair<'a> = pest::iterators::Pair<'a, Rule>;
+type Pairs<'a> = pest::iterators::Pairs<'a, Rule>;
 type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Error, Debug)]
@@ -114,6 +115,7 @@ impl TryFrom<Pair<'_>> for Argument {
     }
 }
 
+// TODO last statement should return??
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StatementBlock(Vec<Statement>);
 
@@ -121,7 +123,15 @@ impl TryFrom<Pair<'_>> for StatementBlock {
     type Error = Error;
 
     fn try_from(value: Pair<'_>) -> Result<Self> {
-        value.into_inner().map(Statement::try_from).collect::<Result<Vec<Statement>>>().map(Self)
+        Self::try_from(value.into_inner())
+    }
+}
+
+impl TryFrom<Pairs<'_>> for StatementBlock {
+    type Error = Error;
+
+    fn try_from(value: Pairs<'_>) -> Result<Self> {
+        value.map(Statement::try_from).collect::<Result<Vec<Statement>>>().map(Self)
     }
 }
 
@@ -146,6 +156,7 @@ impl TryFrom<Pair<'_>> for Statement {
             },
             Rule::function_call => FunctionCall::try_from(value).map(Self::FunctionCall),
             Rule::string => WhispString::try_from(value).map(Self::String),
+            rule => Err(Error::UnexpectedRule(rule)),
         }
     }
 }
@@ -153,14 +164,39 @@ impl TryFrom<Pair<'_>> for Statement {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LexicalDeclaration {
     identifier: Identifier,
-    statement: Box<Statement>,
+    statement_block: StatementBlock,
 }
 
 impl TryFrom<Pair<'_>> for LexicalDeclaration {
     type Error = Error;
 
     fn try_from(value: Pair<'_>) -> Result<Self> {
-        match value.as_rule() {}
+        // Extract child nodes, or bail out if supplied node is not a lexical declaration.
+        let mut children = match value.as_rule() {
+            Rule::lexical_declaration => value.into_inner(),
+            rule => return Err(Error::UnexpectedRule(rule)),
+        };
+
+        // Extract the binding identifier.
+        let identifier = children
+            .next()
+            .ok_or_else(|| Error::Unexpected("Lexical declaration has no binding name".to_string()))
+            .and_then(Identifier::try_from)?;
+
+        // Wrap a single statement in a statement block, or extract all the
+        // statements together as a block.
+        let statement_block =
+            if let Some(Rule::statement) = children.peek().map(|pair| pair.as_rule()) {
+                // Get first child. We can unwrap here as we just peeked for
+                // the existence of the node.
+                let statement = Statement::try_from(children.next().unwrap())?;
+
+                StatementBlock(vec![statement])
+            } else {
+                StatementBlock::try_from(children)?
+            };
+
+        Ok(LexicalDeclaration { identifier, statement_block })
     }
 }
 
