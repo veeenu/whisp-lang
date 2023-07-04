@@ -63,6 +63,18 @@ mod tests {
         parse(Rule::statement, r#" cur_branch "#);
         parse(Rule::statement, r#"run git checkout main"#);
         parse(Rule::statement, r#" run git checkout main "#);
+    }
+
+    #[test]
+    fn test_lexical_declaration() {
+        parse(Rule::lexical_declaration, "let foo = bar");
+        parse(Rule::lexical_declaration, r#"let foo = "string""#);
+        parse(Rule::lexical_declaration, r#"let foo = { bar; foo }"#);
+        parse(Rule::lexical_declaration, r#"let foo = let bar = baz"#);
+    }
+
+    #[test]
+    fn test_function_call() {
         parse(Rule::function_call, r#"run git checkout { cur_branch }"#);
         parse(Rule::function_call, r#"run git "checkout" { cur_branch }"#);
         parse(Rule::function_call, "run git r#\"checkout\"# { cur_branch }");

@@ -23,11 +23,11 @@ statement_block = {
 }
 
 statement = {
-  function_declaration | lexical_declaration | function_call
+  function_declaration | lexical_declaration | function_call | string
 }
 
 lexical_declaration = {
-  "let" ~ WHITESPACE+ ~ identifier ~ "=" ~ statement
+  "let" ~ identifier ~ "=" ~ (statement | statement_block)
 }
 
 function_call = {
