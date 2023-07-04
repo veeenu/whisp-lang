@@ -34,7 +34,7 @@ function_call = {
   (identifier ~ argument*)
 }
 
-argument = {
+argument = _{
   string | statement_block
 }
 

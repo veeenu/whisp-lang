@@ -92,6 +92,8 @@ mod tests {
         parse(Rule::statement_block, r#"{run git checkout main}"#);
         parse(Rule::statement_block, r#"{ run git checkout main }"#);
         parse(Rule::statement_block, r#"{ cur_branch }"#);
+        parse(Rule::statement_block, r#"{ fn foo() {} }"#);
+        parse(Rule::statement_block, r#"{ fn foo() {} fn bar() {} foo; bar }"#);
     }
 
     #[test]

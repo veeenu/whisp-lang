@@ -50,15 +50,33 @@ impl TryFrom<Pair<'_>> for WhispString {
     }
 }
 
-/// Function call
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionCall {
     function_name: Identifier,
     arguments: Vec<Argument>,
 }
 
+impl TryFrom<Pair<'_>> for FunctionCall {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
+        match value.as_rule() {}
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Identifier(String);
+
+impl TryFrom<Pair<'_>> for Identifier {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
+        match value.as_rule() {
+            Rule::identifier => Ok(Self(value.as_str().to_string())),
+            rule => Err(Error::UnexpectedRule(rule)),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Argument {
@@ -66,14 +84,59 @@ pub enum Argument {
     StatementBlock(Box<StatementBlock>),
 }
 
+impl TryFrom<Pair<'_>> for Argument {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
+        match value.as_rule() {
+            Rule::argument => Self::try_from(value.into_inner().next().unwrap()),
+            Rule::statement_block => {
+                Ok(Self::StatementBlock(Box::new(StatementBlock::try_from(value)?)))
+            },
+            Rule::string => Ok(Self::String(WhispString::try_from(value)?)),
+            rule => Err(Error::UnexpectedRule(rule)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StatementBlock(Vec<Statement>);
+
+impl TryFrom<Pair<'_>> for StatementBlock {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
+        value
+            .into_inner()
+            .map(Statement::try_from)
+            .collect::<Result<Vec<Statement>, Error>>()
+            .map(Self)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     LexicalDeclaration(LexicalDeclaration),
     FunctionDeclaration(FunctionDeclaration),
     FunctionCall(FunctionCall),
+    String(WhispString),
+}
+
+impl TryFrom<Pair<'_>> for Statement {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
+        match value.as_rule() {
+            Rule::function_declaration => {
+                FunctionDeclaration::try_from(value).map(Self::FunctionDeclaration)
+            },
+            Rule::lexical_declaration => {
+                LexicalDeclaration::try_from(value).map(Self::LexicalDeclaration)
+            },
+            Rule::function_call => FunctionCall::try_from(value).map(Self::FunctionCall),
+            Rule::string => WhispString::try_from(value).map(Self::String),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,11 +145,27 @@ pub struct LexicalDeclaration {
     statement: Box<Statement>,
 }
 
+impl TryFrom<Pair<'_>> for LexicalDeclaration {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
+        match value.as_rule() {}
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDeclaration {
     identifier: Identifier,
     formal_parameters: Vec<Identifier>,
     statement_block: StatementBlock,
+}
+
+impl TryFrom<Pair<'_>> for FunctionDeclaration {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
+        match value.as_rule() {}
+    }
 }
 
 #[cfg(test)]
