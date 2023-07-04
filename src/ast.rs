@@ -4,11 +4,14 @@ use thiserror::Error;
 use crate::parser::*;
 
 type Pair<'a> = pest::iterators::Pair<'a, Rule>;
+type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("pest error")]
     PestError(Box<pest::error::Error<Rule>>),
+    #[error("unexpected")]
+    Unexpected(String),
     #[error("unexpected rule")]
     UnexpectedRule(Rule),
     // #[error("generic")]
@@ -35,7 +38,7 @@ impl WhispString {
 impl TryFrom<Pair<'_>> for WhispString {
     type Error = Error;
 
-    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
+    fn try_from(value: Pair<'_>) -> Result<Self> {
         match value.as_rule() {
             // Recurse and evaluate inner node types.
             Rule::string | Rule::quoted_string_block | Rule::raw_quoted_string_block => {
@@ -59,8 +62,20 @@ pub struct FunctionCall {
 impl TryFrom<Pair<'_>> for FunctionCall {
     type Error = Error;
 
-    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
-        match value.as_rule() {}
+    fn try_from(value: Pair<'_>) -> Result<Self> {
+        let mut children = match value.as_rule() {
+            Rule::function_call => value.into_inner(),
+            rule => return Err(Error::UnexpectedRule(rule)),
+        };
+
+        let function_name = children
+            .next()
+            .ok_or_else(|| Error::Unexpected("Function has no name".to_string()))
+            .and_then(Identifier::try_from)?;
+
+        let arguments = children.map(Argument::try_from).collect::<Result<Vec<_>>>()?;
+
+        Ok(Self { function_name, arguments })
     }
 }
 
@@ -70,7 +85,7 @@ pub struct Identifier(String);
 impl TryFrom<Pair<'_>> for Identifier {
     type Error = Error;
 
-    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
+    fn try_from(value: Pair<'_>) -> Result<Self> {
         match value.as_rule() {
             Rule::identifier => Ok(Self(value.as_str().to_string())),
             rule => Err(Error::UnexpectedRule(rule)),
@@ -87,7 +102,7 @@ pub enum Argument {
 impl TryFrom<Pair<'_>> for Argument {
     type Error = Error;
 
-    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
+    fn try_from(value: Pair<'_>) -> Result<Self> {
         match value.as_rule() {
             Rule::argument => Self::try_from(value.into_inner().next().unwrap()),
             Rule::statement_block => {
@@ -105,12 +120,8 @@ pub struct StatementBlock(Vec<Statement>);
 impl TryFrom<Pair<'_>> for StatementBlock {
     type Error = Error;
 
-    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
-        value
-            .into_inner()
-            .map(Statement::try_from)
-            .collect::<Result<Vec<Statement>, Error>>()
-            .map(Self)
+    fn try_from(value: Pair<'_>) -> Result<Self> {
+        value.into_inner().map(Statement::try_from).collect::<Result<Vec<Statement>>>().map(Self)
     }
 }
 
@@ -125,7 +136,7 @@ pub enum Statement {
 impl TryFrom<Pair<'_>> for Statement {
     type Error = Error;
 
-    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
+    fn try_from(value: Pair<'_>) -> Result<Self> {
         match value.as_rule() {
             Rule::function_declaration => {
                 FunctionDeclaration::try_from(value).map(Self::FunctionDeclaration)
@@ -148,7 +159,7 @@ pub struct LexicalDeclaration {
 impl TryFrom<Pair<'_>> for LexicalDeclaration {
     type Error = Error;
 
-    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
+    fn try_from(value: Pair<'_>) -> Result<Self> {
         match value.as_rule() {}
     }
 }
@@ -163,7 +174,7 @@ pub struct FunctionDeclaration {
 impl TryFrom<Pair<'_>> for FunctionDeclaration {
     type Error = Error;
 
-    fn try_from(value: Pair<'_>) -> Result<Self, Self::Error> {
+    fn try_from(value: Pair<'_>) -> Result<Self> {
         match value.as_rule() {}
     }
 }
@@ -172,7 +183,7 @@ impl TryFrom<Pair<'_>> for FunctionDeclaration {
 mod tests {
     use super::*;
 
-    fn try_parse<'a, T>(rule: Rule, code: &'a str) -> Result<T, Error>
+    fn try_parse<'a, T>(rule: Rule, code: &'a str) -> Result<T>
     where
         T: std::fmt::Debug + TryFrom<Pair<'a>, Error = Error>,
     {
