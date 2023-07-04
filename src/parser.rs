@@ -35,7 +35,7 @@ mod tests {
             Err(e) => {
                 eprintln!("{e}");
                 panic!();
-            }
+            },
         }
     }
 
@@ -44,8 +44,8 @@ mod tests {
         parse(Rule::string, r#""string""#);
         parse(Rule::string, r#""another string""#);
         parse(Rule::string, r#"another_string"#);
-        parse(Rule::unquoted_string, r#"another_string!_no,-seriously"#);
-        parse(Rule::raw_quoted_string, "r#\"I am a raw string\"#");
+        parse(Rule::string, r#"another_string!_no,-seriously"#);
+        parse(Rule::string, "r#\"I am a raw string!!!{};\"#");
     }
 
     #[test]
@@ -54,6 +54,9 @@ mod tests {
         parse(Rule::statement, r#" cur_branch "#);
         parse(Rule::statement, r#"run git checkout main"#);
         parse(Rule::statement, r#" run git checkout main "#);
+        parse(Rule::function_call, r#"run git checkout { cur_branch }"#);
+        parse(Rule::function_call, r#"run git "checkout" { cur_branch }"#);
+        parse(Rule::function_call, "run git r#\"checkout\"# { cur_branch }");
     }
 
     #[test]

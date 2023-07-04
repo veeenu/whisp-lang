@@ -41,7 +41,9 @@ argument = {
   string | identifier | statement_block
 }
 
-string = @{ quoted_string | unquoted_string | raw_quoted_string }
-unquoted_string = _{ (!(RESERVED | WHITESPACE) ~ ANY)+ }
-quoted_string = _{ ("\"" ~ (!("\"") ~ ANY)* ~ "\"") }
-raw_quoted_string = _{ "r#\"" ~ (!("\"#") ~ ANY)* ~ "\"#"}
+string = ${ quoted_string_block | raw_quoted_string_block | unquoted_string }
+quoted_string_block = _{ ("\"" ~ quoted_string ~ "\"") }
+quoted_string = { (!("\"") ~ ANY)* }
+raw_quoted_string_block = _{ "r#\"" ~ raw_quoted_string ~ "\"#"}
+raw_quoted_string = { (!("\"#") ~ ANY)* }
+unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
