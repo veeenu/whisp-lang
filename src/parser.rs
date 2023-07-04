@@ -1,4 +1,3 @@
-use pest::Parser;
 use pest_derive::Parser;
 
 #[derive(Parser)]
@@ -8,6 +7,7 @@ pub struct WhispParser;
 #[cfg(test)]
 mod tests {
     use pest::iterators::Pairs;
+    use pest::Parser;
 
     use super::*;
 
