@@ -29,7 +29,8 @@ mod tests {
                 print!("  ");
             }
             print!("\x1b[34;1m{rule}\x1b[0m");
-            for _ in 0..(32 - indent * 2 - rule.len()) {
+            let columns = rule.len() + indent * 2;
+            for _ in 0..(32usize.saturating_sub(columns)) {
                 print!(" ");
             }
             println!("{text}");
@@ -127,8 +128,7 @@ mod tests {
     }
 
     #[test]
-    fn test_load_grammar() {
-        let res = WhispParser::parse(Rule::program, SAMPLE1);
-        println!("{res:#?}");
+    fn test_program() {
+        parse(Rule::program, SAMPLE1);
     }
 }
