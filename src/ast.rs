@@ -202,17 +202,72 @@ impl TryFrom<Pair<'_>> for LexicalDeclaration {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDeclaration {
+    visibility_modifier: VisibilityModifier,
     identifier: Identifier,
     formal_parameters: Vec<Identifier>,
     statement_block: StatementBlock,
+}
+
+impl FunctionDeclaration {
+    fn parse_formal_parameters(value: Pair<'_>) -> Result<Vec<Identifier>> {
+        let children = match value.as_rule() {
+            Rule::formal_parameters => value.into_inner(),
+            rule => return Err(Error::UnexpectedRule(rule)),
+        };
+
+        children.map(Identifier::try_from).collect()
+    }
 }
 
 impl TryFrom<Pair<'_>> for FunctionDeclaration {
     type Error = Error;
 
     fn try_from(value: Pair<'_>) -> Result<Self> {
-        match value.as_rule() {}
+        let mut children = match value.as_rule() {
+            Rule::function_declaration => value.into_inner(),
+            rule => return Err(Error::UnexpectedRule(rule)),
+        };
+
+        let visibility_modifier =
+            if let Some(Rule::visibility_modifier) = children.peek().map(|pair| pair.as_rule()) {
+                // Consume the visibility modifier token
+                match children.next().unwrap().as_str() {
+                    "pub" => VisibilityModifier::Public,
+                    x => return Err(Error::Unexpected(format!("visibility modifier {x}"))),
+                }
+            } else {
+                VisibilityModifier::Private
+            };
+
+        let identifier = children
+            .next()
+            .ok_or_else(|| {
+                Error::Unexpected("Function declaration has no name identifier".to_string())
+            })
+            .and_then(Identifier::try_from)?;
+
+        let formal_parameters = children
+            .next()
+            .ok_or_else(|| {
+                Error::Unexpected("Function declaration has no name identifier".to_string())
+            })
+            .and_then(Self::parse_formal_parameters)?;
+
+        let statement_block = children
+            .next()
+            .ok_or_else(|| {
+                Error::Unexpected("Function declaration has no name identifier".to_string())
+            })
+            .and_then(StatementBlock::try_from)?;
+
+        Ok(Self { visibility_modifier, identifier, formal_parameters, statement_block })
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VisibilityModifier {
+    Public,
+    Private,
 }
 
 #[cfg(test)]
