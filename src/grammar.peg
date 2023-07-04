@@ -4,9 +4,6 @@ program = _{
   EOI
 }
 
-WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
-RESERVED = _{";" | "{" | "}" | "\""}
-
 function_declaration = {
   visibility_modifier? ~
   "fn" ~
@@ -38,7 +35,7 @@ function_call = {
 }
 
 argument = {
-  string | identifier | statement_block
+  string | statement_block
 }
 
 string = ${ quoted_string_block | raw_quoted_string_block | unquoted_string }
@@ -47,3 +44,7 @@ quoted_string = { (!("\"") ~ ANY)* }
 raw_quoted_string_block = _{ "r#\"" ~ raw_quoted_string ~ "\"#"}
 raw_quoted_string = { (!("\"#") ~ ANY)* }
 unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+RESERVED = _{";" | "{" | "}" | "\""}
+
