@@ -16,5 +16,5 @@ pub fn ct(test_filter, extra_params) {
 }
 
 pub fn ctnc(test_filter) {
-  ct --nocapture
+  ct { test_filter } --nocapture
 }

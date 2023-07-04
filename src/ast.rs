@@ -1,4 +1,4 @@
-use pest::Parser;
+use pest::{Parser, Span};
 use thiserror::Error;
 
 use crate::parser::*;
@@ -14,7 +14,7 @@ pub enum Error {
     #[error("unexpected")]
     Unexpected(String),
     #[error("unexpected rule")]
-    UnexpectedRule(Rule),
+    UnexpectedRule(Rule, usize, usize, usize, usize),
     // #[error("generic")]
     // Generic(String),
 }
@@ -25,7 +25,19 @@ impl From<pest::error::Error<Rule>> for Error {
     }
 }
 
-/// Language string type.
+impl Error {
+    pub fn unexpected_rule(value: Pair<'_>) -> Self {
+        let rule = value.as_rule();
+        let span = value.as_span();
+
+        let (start_row, start_col) = span.start_pos().line_col();
+        let (end_row, end_col) = span.end_pos().line_col();
+
+        Self::UnexpectedRule(rule, start_row, start_col, end_row, end_col)
+    }
+}
+
+/// Language primitive string type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WhispString(String);
 
@@ -49,7 +61,7 @@ impl TryFrom<Pair<'_>> for WhispString {
             Rule::quoted_string | Rule::raw_quoted_string | Rule::unquoted_string => {
                 Ok(Self(value.as_str().to_string()))
             },
-            rule => Err(Error::UnexpectedRule(rule)),
+            _ => Err(Error::unexpected_rule(value)),
         }
     }
 }
@@ -66,7 +78,7 @@ impl TryFrom<Pair<'_>> for FunctionCall {
     fn try_from(value: Pair<'_>) -> Result<Self> {
         let mut children = match value.as_rule() {
             Rule::function_call => value.into_inner(),
-            rule => return Err(Error::UnexpectedRule(rule)),
+            _ => return Err(Error::unexpected_rule(value)),
         };
 
         let function_name = children
@@ -89,7 +101,7 @@ impl TryFrom<Pair<'_>> for Identifier {
     fn try_from(value: Pair<'_>) -> Result<Self> {
         match value.as_rule() {
             Rule::identifier => Ok(Self(value.as_str().to_string())),
-            rule => Err(Error::UnexpectedRule(rule)),
+            _ => Err(Error::unexpected_rule(value)),
         }
     }
 }
@@ -110,7 +122,7 @@ impl TryFrom<Pair<'_>> for Argument {
                 Ok(Self::StatementBlock(Box::new(StatementBlock::try_from(value)?)))
             },
             Rule::string => Ok(Self::String(WhispString::try_from(value)?)),
-            rule => Err(Error::UnexpectedRule(rule)),
+            _ => Err(Error::unexpected_rule(value)),
         }
     }
 }
@@ -148,6 +160,7 @@ impl TryFrom<Pair<'_>> for Statement {
 
     fn try_from(value: Pair<'_>) -> Result<Self> {
         match value.as_rule() {
+            Rule::statement => Self::try_from(value.into_inner().next().unwrap()),
             Rule::function_declaration => {
                 FunctionDeclaration::try_from(value).map(Self::FunctionDeclaration)
             },
@@ -156,7 +169,7 @@ impl TryFrom<Pair<'_>> for Statement {
             },
             Rule::function_call => FunctionCall::try_from(value).map(Self::FunctionCall),
             Rule::string => WhispString::try_from(value).map(Self::String),
-            rule => Err(Error::UnexpectedRule(rule)),
+            _ => Err(Error::unexpected_rule(value)),
         }
     }
 }
@@ -174,7 +187,7 @@ impl TryFrom<Pair<'_>> for LexicalDeclaration {
         // Extract child nodes, or bail out if supplied node is not a lexical declaration.
         let mut children = match value.as_rule() {
             Rule::lexical_declaration => value.into_inner(),
-            rule => return Err(Error::UnexpectedRule(rule)),
+            _ => return Err(Error::unexpected_rule(value)),
         };
 
         // Extract the binding identifier.
@@ -185,16 +198,17 @@ impl TryFrom<Pair<'_>> for LexicalDeclaration {
 
         // Wrap a single statement in a statement block, or extract all the
         // statements together as a block.
-        let statement_block =
-            if let Some(Rule::statement) = children.peek().map(|pair| pair.as_rule()) {
-                // Get first child. We can unwrap here as we just peeked for
-                // the existence of the node.
-                let statement = Statement::try_from(children.next().unwrap())?;
+        let statement_node = children.next().ok_or_else(|| {
+            Error::Unexpected("Lexical declaration has no statement node".to_string())
+        })?;
 
-                StatementBlock(vec![statement])
-            } else {
-                StatementBlock::try_from(children)?
-            };
+        let statement_block = match statement_node.as_rule() {
+            Rule::statement_block => StatementBlock::try_from(statement_node),
+            Rule::statement => {
+                Statement::try_from(statement_node).map(|node| StatementBlock(vec![node]))
+            },
+            _ => return Err(Error::unexpected_rule(statement_node)),
+        }?;
 
         Ok(LexicalDeclaration { identifier, statement_block })
     }
@@ -212,7 +226,7 @@ impl FunctionDeclaration {
     fn parse_formal_parameters(value: Pair<'_>) -> Result<Vec<Identifier>> {
         let children = match value.as_rule() {
             Rule::formal_parameters => value.into_inner(),
-            rule => return Err(Error::UnexpectedRule(rule)),
+            _ => return Err(Error::unexpected_rule(value)),
         };
 
         children.map(Identifier::try_from).collect()
@@ -225,7 +239,7 @@ impl TryFrom<Pair<'_>> for FunctionDeclaration {
     fn try_from(value: Pair<'_>) -> Result<Self> {
         let mut children = match value.as_rule() {
             Rule::function_declaration => value.into_inner(),
-            rule => return Err(Error::UnexpectedRule(rule)),
+            _ => return Err(Error::unexpected_rule(value)),
         };
 
         let visibility_modifier =
@@ -249,14 +263,14 @@ impl TryFrom<Pair<'_>> for FunctionDeclaration {
         let formal_parameters = children
             .next()
             .ok_or_else(|| {
-                Error::Unexpected("Function declaration has no name identifier".to_string())
+                Error::Unexpected("Function declaration has no formal parameters".to_string())
             })
             .and_then(Self::parse_formal_parameters)?;
 
         let statement_block = children
             .next()
             .ok_or_else(|| {
-                Error::Unexpected("Function declaration has no name identifier".to_string())
+                Error::Unexpected("Function declaration has no statement block".to_string())
             })
             .and_then(StatementBlock::try_from)?;
 
@@ -270,6 +284,26 @@ pub enum VisibilityModifier {
     Private,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Program(Vec<FunctionDeclaration>);
+
+impl TryFrom<Pair<'_>> for Program {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self> {
+        let children = match value.as_rule() {
+            Rule::program => value.into_inner(),
+            _ => return Err(Error::unexpected_rule(value)),
+        };
+
+        children
+            .filter(|node| node.as_rule() != Rule::EOI)
+            .map(FunctionDeclaration::try_from)
+            .collect::<Result<Vec<_>>>()
+            .map(Self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,9 +312,10 @@ mod tests {
     where
         T: std::fmt::Debug + TryFrom<Pair<'a>, Error = Error>,
     {
-        WhispParser::parse(rule, code.trim())
-            .map_err(Error::from)
-            .and_then(|mut pairs| T::try_from(pairs.next().unwrap()))
+        WhispParser::parse(rule, code.trim()).map_err(Error::from).and_then(|mut pairs| {
+            let pair = pairs.next().unwrap();
+            T::try_from(pair)
+        })
     }
 
     fn assert_match<'a, T>(rule: Rule, code: &'a str, target: T)
@@ -311,5 +346,11 @@ mod tests {
             "r#\"I am a raw string!!!{};\"#",
             WhispString::new("I am a raw string!!!{};"),
         );
+    }
+
+    #[test]
+    fn test_parse_program() {
+        let r = try_parse::<Program>(Rule::program, include_str!("../examples/git_aliases.whisp"));
+        println!("{r:#?}");
     }
 }

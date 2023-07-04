@@ -1,7 +1,7 @@
-program = _{
+program = {
   SOI ~ 
   function_declaration* ~ 
-  EOI
+  EOI 
 }
 
 function_declaration = {
