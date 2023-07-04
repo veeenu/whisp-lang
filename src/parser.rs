@@ -44,7 +44,8 @@ mod tests {
         parse(Rule::string, r#""string""#);
         parse(Rule::string, r#""another string""#);
         parse(Rule::string, r#"another_string"#);
-        parse(Rule::string, r#"another_string!_no,-seriously"#);
+        parse(Rule::unquoted_string, r#"another_string!_no,-seriously"#);
+        parse(Rule::raw_quoted_string, "r#\"I am a raw string\"#");
     }
 
     #[test]
