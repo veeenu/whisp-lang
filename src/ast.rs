@@ -37,147 +37,30 @@ impl Error {
     }
 }
 
-/// Language primitive string type.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WhispString(String);
+pub struct Program(Vec<FunctionDeclaration>);
 
-impl WhispString {
-    /// Create a new [`WhispString`] from any string type.
-    pub fn new<S: Into<String>>(s: S) -> Self {
-        Self(s.into())
-    }
-}
-
-impl TryFrom<Pair<'_>> for WhispString {
+impl TryFrom<Pair<'_>> for Program {
     type Error = Error;
 
     fn try_from(value: Pair<'_>) -> Result<Self> {
-        match value.as_rule() {
-            // Recurse and evaluate inner node types.
-            Rule::string | Rule::quoted_string_block | Rule::raw_quoted_string_block => {
-                Self::try_from(value.into_inner().next().unwrap())
-            },
-            // Evaluate string directly.
-            Rule::quoted_string | Rule::raw_quoted_string | Rule::unquoted_string => {
-                Ok(Self(value.as_str().to_string()))
-            },
-            _ => Err(Error::unexpected_rule(value)),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FunctionCall {
-    function_name: Identifier,
-    arguments: Vec<Argument>,
-}
-
-impl TryFrom<Pair<'_>> for FunctionCall {
-    type Error = Error;
-
-    fn try_from(value: Pair<'_>) -> Result<Self> {
-        let mut children = match value.as_rule() {
-            Rule::function_call => value.into_inner(),
+        let children = match value.as_rule() {
+            Rule::program => value.into_inner(),
             _ => return Err(Error::unexpected_rule(value)),
         };
 
-        let function_name = children
-            .next()
-            .ok_or_else(|| Error::Unexpected("Function has no name".to_string()))
-            .and_then(Identifier::try_from)?;
-
-        let arguments = children.map(Argument::try_from).collect::<Result<Vec<_>>>()?;
-
-        Ok(Self { function_name, arguments })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Identifier(String);
-
-impl TryFrom<Pair<'_>> for Identifier {
-    type Error = Error;
-
-    fn try_from(value: Pair<'_>) -> Result<Self> {
-        match value.as_rule() {
-            Rule::identifier => Ok(Self(value.as_str().to_string())),
-            _ => Err(Error::unexpected_rule(value)),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Argument {
-    String(WhispString),
-    StatementBlock(Box<StatementBlock>),
-}
-
-impl TryFrom<Pair<'_>> for Argument {
-    type Error = Error;
-
-    fn try_from(value: Pair<'_>) -> Result<Self> {
-        match value.as_rule() {
-            Rule::argument => Self::try_from(value.into_inner().next().unwrap()),
-            Rule::statement_block => {
-                Ok(Self::StatementBlock(Box::new(StatementBlock::try_from(value)?)))
-            },
-            Rule::string => Ok(Self::String(WhispString::try_from(value)?)),
-            _ => Err(Error::unexpected_rule(value)),
-        }
-    }
-}
-
-// TODO last statement should return??
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StatementBlock(Vec<Statement>);
-
-impl TryFrom<Pair<'_>> for StatementBlock {
-    type Error = Error;
-
-    fn try_from(value: Pair<'_>) -> Result<Self> {
-        Self::try_from(value.into_inner())
-    }
-}
-
-impl TryFrom<Pairs<'_>> for StatementBlock {
-    type Error = Error;
-
-    fn try_from(value: Pairs<'_>) -> Result<Self> {
-        value.map(Statement::try_from).collect::<Result<Vec<Statement>>>().map(Self)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Statement {
-    LexicalDeclaration(LexicalDeclaration),
-    FunctionDeclaration(FunctionDeclaration),
-    FunctionCall(FunctionCall),
-    String(WhispString),
-}
-
-impl TryFrom<Pair<'_>> for Statement {
-    type Error = Error;
-
-    fn try_from(value: Pair<'_>) -> Result<Self> {
-        match value.as_rule() {
-            Rule::statement => Self::try_from(value.into_inner().next().unwrap()),
-            Rule::function_declaration => {
-                FunctionDeclaration::try_from(value).map(Self::FunctionDeclaration)
-            },
-            Rule::lexical_declaration => {
-                LexicalDeclaration::try_from(value).map(Self::LexicalDeclaration)
-            },
-            Rule::function_call => FunctionCall::try_from(value).map(Self::FunctionCall),
-            Rule::string => WhispString::try_from(value).map(Self::String),
-            _ => Err(Error::unexpected_rule(value)),
-        }
+        children
+            .filter(|node| node.as_rule() != Rule::EOI)
+            .map(FunctionDeclaration::try_from)
+            .collect::<Result<Vec<_>>>()
+            .map(Self)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LexicalDeclaration {
     identifier: Identifier,
-    statement_block: StatementBlock,
+    expression: Expression,
 }
 
 impl TryFrom<Pair<'_>> for LexicalDeclaration {
@@ -196,21 +79,14 @@ impl TryFrom<Pair<'_>> for LexicalDeclaration {
             .ok_or_else(|| Error::Unexpected("Lexical declaration has no binding name".to_string()))
             .and_then(Identifier::try_from)?;
 
-        // Wrap a single statement in a statement block, or extract all the
-        // statements together as a block.
-        let statement_node = children.next().ok_or_else(|| {
-            Error::Unexpected("Lexical declaration has no statement node".to_string())
-        })?;
+        let expression = children
+            .next()
+            .ok_or_else(|| {
+                Error::Unexpected("Lexical declaration has no statement node".to_string())
+            })
+            .and_then(Expression::try_from)?;
 
-        let statement_block = match statement_node.as_rule() {
-            Rule::statement_block => StatementBlock::try_from(statement_node),
-            Rule::statement => {
-                Statement::try_from(statement_node).map(|node| StatementBlock(vec![node]))
-            },
-            _ => return Err(Error::unexpected_rule(statement_node)),
-        }?;
-
-        Ok(LexicalDeclaration { identifier, statement_block })
+        Ok(LexicalDeclaration { identifier, expression })
     }
 }
 
@@ -285,22 +161,159 @@ pub enum VisibilityModifier {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Program(Vec<FunctionDeclaration>);
+pub struct Identifier(String);
 
-impl TryFrom<Pair<'_>> for Program {
+impl TryFrom<Pair<'_>> for Identifier {
     type Error = Error;
 
     fn try_from(value: Pair<'_>) -> Result<Self> {
-        let children = match value.as_rule() {
-            Rule::program => value.into_inner(),
+        match value.as_rule() {
+            Rule::identifier => Ok(Self(value.as_str().to_string())),
+            _ => Err(Error::unexpected_rule(value)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StatementBlockItem {
+    Statement(Statement),
+    Expression(Expression),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatementBlock(Vec<StatementBlockItem>, Option<Expression>);
+
+impl TryFrom<Pair<'_>> for StatementBlock {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self> {
+        Self::try_from(value.into_inner())
+    }
+}
+
+impl TryFrom<Pairs<'_>> for StatementBlock {
+    type Error = Error;
+
+    fn try_from(value: Pairs<'_>) -> Result<Self> {
+        let mut statements = Vec::new();
+        let mut tail_expr = None;
+
+        for pair in value {
+            if let Some("tail_expr") = pair.as_node_tag() {
+                tail_expr = Some(Expression::try_from(pair)?);
+                continue;
+            }
+
+            let statement_block_item = match pair.as_rule() {
+                Rule::statement => Statement::try_from(pair).map(StatementBlockItem::Statement),
+                Rule::expression => Expression::try_from(pair).map(StatementBlockItem::Expression),
+                _ => Err(Error::unexpected_rule(pair)),
+            }?;
+
+            statements.push(statement_block_item);
+        }
+
+        Ok(Self(statements, tail_expr))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Statement {
+    LexicalDeclaration(LexicalDeclaration),
+    FunctionDeclaration(FunctionDeclaration),
+}
+
+impl TryFrom<Pair<'_>> for Statement {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self> {
+        match value.as_rule() {
+            Rule::statement => Self::try_from(value.into_inner().next().unwrap()),
+            Rule::function_declaration => {
+                FunctionDeclaration::try_from(value).map(Self::FunctionDeclaration)
+            },
+            Rule::lexical_declaration => {
+                LexicalDeclaration::try_from(value).map(Self::LexicalDeclaration)
+            },
+            _ => Err(Error::unexpected_rule(value)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Expression {
+    String(WhispString),
+    StatementBlock(Box<StatementBlock>),
+}
+
+impl TryFrom<Pair<'_>> for Expression {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self> {
+        match value.as_rule() {
+            Rule::expression => Self::try_from(value.into_inner().next().unwrap()),
+            Rule::parenthesis_expression => Self::try_from(value.into_inner().next().unwrap()),
+            Rule::statement_block => {
+                Ok(Self::StatementBlock(Box::new(StatementBlock::try_from(value)?)))
+            },
+            Rule::string => Ok(Self::String(WhispString::try_from(value)?)),
+            _ => Err(Error::unexpected_rule(value)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FunctionCall {
+    function_name: Identifier,
+    arguments: Vec<Expression>,
+}
+
+impl TryFrom<Pair<'_>> for FunctionCall {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self> {
+        let mut children = match value.as_rule() {
+            Rule::function_call => value.into_inner(),
             _ => return Err(Error::unexpected_rule(value)),
         };
 
-        children
-            .filter(|node| node.as_rule() != Rule::EOI)
-            .map(FunctionDeclaration::try_from)
-            .collect::<Result<Vec<_>>>()
-            .map(Self)
+        let function_name = children
+            .next()
+            .ok_or_else(|| Error::Unexpected("Function has no name".to_string()))
+            .and_then(Identifier::try_from)?;
+
+        let arguments = children.map(Expression::try_from).collect::<Result<Vec<_>>>()?;
+
+        Ok(Self { function_name, arguments })
+    }
+}
+
+/// Language primitive string type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WhispString(String);
+
+impl WhispString {
+    /// Create a new [`WhispString`] from any string type.
+    pub fn new<S: Into<String>>(s: S) -> Self {
+        Self(s.into())
+    }
+}
+
+impl TryFrom<Pair<'_>> for WhispString {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self> {
+        match value.as_rule() {
+            // Recurse and evaluate inner node types.
+            Rule::string | Rule::quoted_string_block | Rule::raw_quoted_string_block => {
+                Self::try_from(value.into_inner().next().unwrap())
+            },
+            // Evaluate string directly.
+            Rule::quoted_string | Rule::raw_quoted_string | Rule::unquoted_string => {
+                Ok(Self(value.as_str().to_string()))
+            },
+            _ => Err(Error::unexpected_rule(value)),
+        }
     }
 }
 

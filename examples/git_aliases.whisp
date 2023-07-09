@@ -8,11 +8,11 @@ pub fn gpm() {
   run git checkout main;
   run git fetch;
   run git pull;
-  run git checkout { cur_branch };
+  run git checkout (cur_branch);
 }
 
 pub fn ct(test_filter, extra_params) {
-  run cargo test { test_filter } -- { extra_params }
+  run cargo test { test_filter } -- (extra_params)
 }
 
 pub fn ctnc(test_filter) {

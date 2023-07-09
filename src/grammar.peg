@@ -22,12 +22,11 @@ function_declaration = ${
 visibility_modifier = @{ "pub" }
 
 identifier = @{ (!RESERVED_IDENTIFIER ~ (ASCII_ALPHANUMERIC | "_")+) }
-RESERVED_IDENTIFIER = @{ "pub" | "fn" | "let" }
 
 formal_parameters = !{ "(" ~ (identifier ~ ",")* ~ (identifier ~ ","?)? ~ ")" }
 
 statement_block = !{
-  "{" ~ (statement | (expression ~ ";"))* ~ expression? ~ "}"
+  "{" ~ (statement | (expression ~ ";"))* ~ #tail_expr = expression? ~ "}"
 }
 
 statement = !{
@@ -41,11 +40,7 @@ expression = !{
 parenthesis_expression = _{ "(" ~ expression ~ ")" }
 
 function_call = {
-  (identifier ~ argument*)
-}
-
-argument = _{
-  string | statement_block
+  (identifier ~ expression*)
 }
 
 string = ${ quoted_string_block | raw_quoted_string_block | unquoted_string }
@@ -57,3 +52,4 @@ unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 RESERVED = _{";" | "{" | "}" | "(" | ")" | "\""}
+RESERVED_IDENTIFIER = @{ "pub" | "fn" | "let" }
