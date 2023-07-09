@@ -234,6 +234,21 @@ impl TryFrom<Pairs<'_>> for StatementBlock {
     }
 }
 
+impl<'a> IntoIterator for &'a StatementBlock {
+    type Item = &'a StatementBlockItem;
+    type IntoIter = std::slice::Iter<'a, StatementBlockItem>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl StatementBlock {
+    pub fn tail_expr(&self) -> Option<&Expression> {
+        self.1.as_ref()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     LexicalDeclaration(LexicalDeclaration),
@@ -260,6 +275,7 @@ impl TryFrom<Pair<'_>> for Statement {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expression {
     String(WhispString),
+    FunctionCall(FunctionCall),
     StatementBlock(Box<StatementBlock>),
 }
 
@@ -274,6 +290,7 @@ impl TryFrom<Pair<'_>> for Expression {
                 Ok(Self::StatementBlock(Box::new(StatementBlock::try_from(value)?)))
             },
             Rule::string => Ok(Self::String(WhispString::try_from(value)?)),
+            Rule::function_call => Ok(Self::FunctionCall(FunctionCall::try_from(value)?)),
             _ => Err(Error::unexpected_rule(value)),
         }
     }

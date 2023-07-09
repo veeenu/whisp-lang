@@ -4,7 +4,10 @@ use std::rc::{Rc, Weak};
 use ahash::AHashMap as HashMap;
 use thiserror::Error;
 
-use crate::ast::{Error as ParseError, Identifier, Program, StatementBlock, WhispString};
+use crate::ast::{
+    Error as ParseError, Expression, FunctionCall, Identifier, Program, Statement, StatementBlock,
+    StatementBlockItem, WhispString,
+};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -37,14 +40,15 @@ pub enum Builtin {
     Print,
 }
 
+#[derive(Debug)]
 pub struct Interpreter {
-    stack: (),
+    stack: ScopeStack,
 }
 
 impl Interpreter {
     pub fn new(code: &str) -> Result<Self> {
         let program = Program::parse(code).map_err(Error::from)?;
-        let mut stack = ();
+        let stack = ScopeStack::new();
 
         Ok(Self { stack })
     }
@@ -62,7 +66,11 @@ impl Scope {
 
     pub fn declare_object(&mut self, identifier: &Identifier, object: Object) -> Weak<Object> {
         self.names.insert(identifier.to_string(), Rc::new(object));
-        Rc::downgrade(&self.names.get(identifier.deref()).unwrap())
+        self.lookup(identifier).unwrap()
+    }
+
+    pub fn lookup(&self, identifier: &Identifier) -> Option<Weak<Object>> {
+        self.names.get(identifier.deref()).map(Rc::downgrade)
     }
 }
 
@@ -78,5 +86,57 @@ impl Default for ScopeStack {
 impl ScopeStack {
     pub fn new() -> Self {
         Default::default()
+    }
+
+    pub fn push(&mut self) -> &mut Scope {
+        self.0.push(Scope::new());
+        self.current()
+    }
+
+    pub fn pop(&mut self) {
+        if self.0.len() > 1 {
+            self.0.pop();
+        }
+    }
+
+    pub fn current(&mut self) -> &mut Scope {
+        self.0.last_mut().unwrap()
+    }
+
+    pub fn lookup(&mut self, identifier: &Identifier) -> Option<Weak<Object>> {
+        self.0.iter_mut().rev().find_map(|scope| scope.lookup(identifier))
+    }
+
+    pub fn evaluate_statement_block(&mut self, block: &StatementBlock) -> Object {
+        for block_item in block {
+            match block_item {
+                StatementBlockItem::Statement(statement) => self.evaluate_statement(statement),
+                StatementBlockItem::Expression(expression) => self.evaluate_expression(expression),
+            };
+        }
+
+        if let Some(tail_expr) = block.tail_expr() {
+            self.evaluate_expression(tail_expr)
+        } else {
+            Object::Option(None)
+        }
+    }
+
+    pub fn evaluate_statement(&mut self, expr: &Statement) -> Object {
+        Object::Option(None)
+    }
+
+    pub fn evaluate_expression(&mut self, expr: &Expression) -> Object {
+        match expr {
+            Expression::String(s) => Object::String(s.clone()),
+            Expression::FunctionCall(function_call) => self.function_call(function_call),
+            Expression::StatementBlock(block) => self.evaluate_statement_block(block),
+        }
+    }
+
+    pub fn lexical_declaration() {}
+    pub fn function_declaration() {}
+    pub fn function_call(&mut self, foo: &FunctionCall) -> Object {
+        Object::Option(None)
     }
 }
