@@ -68,8 +68,8 @@ impl Program {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LexicalDeclaration {
-    identifier: Identifier,
-    expression: Expression,
+    pub identifier: Identifier,
+    pub expression: Expression,
 }
 
 impl TryFrom<Pair<'_>> for LexicalDeclaration {
@@ -101,10 +101,10 @@ impl TryFrom<Pair<'_>> for LexicalDeclaration {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDeclaration {
-    visibility_modifier: VisibilityModifier,
-    identifier: Identifier,
-    formal_parameters: Vec<Identifier>,
-    statement_block: StatementBlock,
+    pub visibility_modifier: VisibilityModifier,
+    pub identifier: Identifier,
+    pub formal_parameters: Vec<Identifier>,
+    pub statement_block: StatementBlock,
 }
 
 impl FunctionDeclaration {
@@ -319,6 +319,16 @@ impl TryFrom<Pair<'_>> for FunctionCall {
         let arguments = children.map(Expression::try_from).collect::<Result<Vec<_>>>()?;
 
         Ok(Self { function_name, arguments })
+    }
+}
+
+impl FunctionCall {
+    pub fn function_name(&self) -> &Identifier {
+        &self.function_name
+    }
+
+    pub fn arguments(&self) -> &[Expression] {
+        &self.arguments
     }
 }
 
