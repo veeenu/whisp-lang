@@ -48,6 +48,18 @@ mod tests {
         }
     }
 
+    fn fail(rule: Rule, code: &str) {
+        match WhispParser::parse(rule, code.trim()) {
+            Ok(pairs) => {
+                print_tree(pairs, 0);
+                panic!("This shouldn't have parsed!\n{}", code.trim());
+            },
+            Err(e) => {
+                println!("Parsed with expected error: {e}");
+            },
+        }
+    }
+
     #[test]
     fn test_string() {
         parse(Rule::string, r#""string""#);
@@ -108,6 +120,9 @@ mod tests {
 
     #[test]
     fn test_function_declaration() {
+        fail(Rule::function_declaration, "pubfnfoo(){}");
+        fail(Rule::function_declaration, "pub fnfoo(){}");
+        fail(Rule::function_declaration, "pubfn foo(){}");
         parse(
             Rule::function_declaration,
             r#"

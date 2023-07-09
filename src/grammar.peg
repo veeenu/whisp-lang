@@ -4,11 +4,11 @@ program = {
   EOI 
 }
 
-function_declaration = {
-  visibility_modifier? ~
-  "fn" ~
-  identifier ~
-  formal_parameters ~
+function_declaration = ${
+  (visibility_modifier ~ WHITESPACE+)? ~
+  "fn" ~ WHITESPACE+ ~
+  identifier ~ WHITESPACE* ~
+  formal_parameters ~ WHITESPACE* ~
   statement_block
 }
 
@@ -16,9 +16,9 @@ visibility_modifier = @{ "pub" }
 
 identifier = @{ (ASCII_ALPHANUMERIC | "_")+ }
 
-formal_parameters = { "(" ~ (identifier ~ ",")* ~ (identifier ~ ","?)? ~ ")" }
+formal_parameters = !{ "(" ~ (identifier ~ ",")* ~ (identifier ~ ","?)? ~ ")" }
 
-statement_block = {
+statement_block = !{
   "{" ~ (function_declaration | (statement ~ ";"))* ~ statement? ~ "}"
 }
 
