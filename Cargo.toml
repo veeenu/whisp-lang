@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ahash = "0.8.3"
 pest = "2.7.0"
 pest_derive = "2.7.0"
 thiserror = "1.0.40"
