@@ -4,6 +4,13 @@ program = {
   EOI 
 }
 
+lexical_declaration = ${
+  "let" ~ WHITESPACE+ ~ 
+  identifier ~ WHITESPACE* ~
+  "=" ~ WHITESPACE* ~ 
+  (statement | statement_block)
+}
+
 function_declaration = ${
   (visibility_modifier ~ WHITESPACE+)? ~
   "fn" ~ WHITESPACE+ ~
@@ -22,12 +29,8 @@ statement_block = !{
   "{" ~ (function_declaration | (statement ~ ";"))* ~ statement? ~ "}"
 }
 
-statement = {
+statement = !{
   function_declaration | lexical_declaration | function_call | string
-}
-
-lexical_declaration = {
-  "let" ~ identifier ~ "=" ~ (statement | statement_block)
 }
 
 function_call = {

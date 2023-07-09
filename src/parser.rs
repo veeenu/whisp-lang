@@ -55,7 +55,7 @@ mod tests {
                 panic!("This shouldn't have parsed!\n{}", code.trim());
             },
             Err(e) => {
-                println!("Parsed with expected error: {e}");
+                println!("Parser errored as expected: {e}");
             },
         }
     }
@@ -79,7 +79,10 @@ mod tests {
 
     #[test]
     fn test_lexical_declaration() {
+        fail(Rule::lexical_declaration, "letfoo=bar");
+        fail(Rule::lexical_declaration, "letfoo = bar");
         parse(Rule::lexical_declaration, "let foo = bar");
+        parse(Rule::lexical_declaration, "let foo=bar");
         parse(Rule::lexical_declaration, r#"let foo = "string""#);
         parse(Rule::lexical_declaration, r#"let foo = { bar; foo }"#);
         parse(Rule::lexical_declaration, r#"let foo = let bar = baz"#);
