@@ -72,8 +72,10 @@ mod tests {
     fn test_expression() {
         parse(Rule::expression, r#"cur_branch"#);
         parse(Rule::expression, r#" cur_branch "#);
+        parse(Rule::expression, r#"(cur_branch)"#);
         parse(Rule::expression, r#"run git checkout main"#);
         parse(Rule::expression, r#" run git checkout main "#);
+        parse(Rule::expression, r#"(run git checkout main)"#);
     }
 
     #[test]
@@ -81,9 +83,11 @@ mod tests {
         fail(Rule::lexical_declaration, "letfoo=bar");
         fail(Rule::lexical_declaration, "letfoo = bar");
         fail(Rule::lexical_declaration, r#"let foo = let bar = baz;"#);
+        fail(Rule::lexical_declaration, r#"let foo = pub fn bar() {}"#);
         parse(Rule::lexical_declaration, "let foo = bar;");
         parse(Rule::lexical_declaration, "let foo=bar;");
         parse(Rule::lexical_declaration, r#"let foo = "string";"#);
+        parse(Rule::lexical_declaration, r#"let foo = (run git diff main..);"#);
         parse(Rule::lexical_declaration, r#"let foo = { bar; foo };"#);
         parse(Rule::lexical_declaration, r#"let foo = { bar; foo ;};"#);
         parse(Rule::lexical_declaration, r#"let foo = { bar; foo; };"#);
@@ -98,18 +102,17 @@ mod tests {
 
     #[test]
     fn test_statement_block() {
-        // Non-terminal function call statement on a single line
         parse(Rule::statement_block, r#"{cur_branch;}"#);
         parse(Rule::statement_block, r#"{run git checkout main;}"#);
         parse(Rule::statement_block, r#"{ cur_branch; }"#);
         parse(Rule::statement_block, r#"{ run git checkout main; }"#);
-        // Single terminal function call statements on a single line
         parse(Rule::statement_block, r#"{cur_branch}"#);
         parse(Rule::statement_block, r#"{run git checkout main}"#);
         parse(Rule::statement_block, r#"{ run git checkout main }"#);
         parse(Rule::statement_block, r#"{ cur_branch }"#);
         parse(Rule::statement_block, r#"{ fn foo() {} }"#);
         parse(Rule::statement_block, r#"{ fn foo() {} fn bar() {} foo; bar }"#);
+        parse(Rule::statement_block, r#"{ fn foo() {} fn bar() {} foo; (bar) }"#);
     }
 
     #[test]

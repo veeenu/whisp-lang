@@ -56,5 +56,4 @@ raw_quoted_string = { (!("\"#") ~ ANY)* }
 unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
-RESERVED = _{";" | "{" | "}" | "\""}
-
+RESERVED = _{";" | "{" | "}" | "(" | ")" | "\""}
