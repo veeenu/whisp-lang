@@ -8,7 +8,7 @@ lexical_declaration = ${
   "let" ~ WHITESPACE+ ~ 
   identifier ~ WHITESPACE* ~
   "=" ~ WHITESPACE* ~ 
-  (statement | statement_block)
+  expression ~ WHITESPACE* ~ ";"
 }
 
 function_declaration = ${
@@ -21,17 +21,24 @@ function_declaration = ${
 
 visibility_modifier = @{ "pub" }
 
-identifier = @{ (ASCII_ALPHANUMERIC | "_")+ }
+identifier = @{ (!RESERVED_IDENTIFIER ~ (ASCII_ALPHANUMERIC | "_")+) }
+RESERVED_IDENTIFIER = @{ "pub" | "fn" | "let" }
 
 formal_parameters = !{ "(" ~ (identifier ~ ",")* ~ (identifier ~ ","?)? ~ ")" }
 
 statement_block = !{
-  "{" ~ (function_declaration | (statement ~ ";"))* ~ statement? ~ "}"
+  "{" ~ (statement | (expression ~ ";"))* ~ expression? ~ "}"
 }
 
 statement = !{
-  function_declaration | lexical_declaration | function_call | string
+  function_declaration | lexical_declaration
 }
+
+expression = !{
+  function_call | parenthesis_expression | statement_block | string
+}
+
+parenthesis_expression = _{ "(" ~ expression ~ ")" }
 
 function_call = {
   (identifier ~ argument*)

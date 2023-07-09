@@ -42,8 +42,7 @@ mod tests {
         match WhispParser::parse(rule, code.trim()) {
             Ok(pairs) => print_tree(pairs, 0),
             Err(e) => {
-                eprintln!("{e}");
-                panic!();
+                panic!("Parser errored unexpectedly:\n\x1b[31;1m{e}\x1b[0m");
             },
         }
     }
@@ -52,10 +51,10 @@ mod tests {
         match WhispParser::parse(rule, code.trim()) {
             Ok(pairs) => {
                 print_tree(pairs, 0);
-                panic!("This shouldn't have parsed!\n{}", code.trim());
+                panic!("This shouldn't have parsed!\n\x1b[33;1m{}\x1b[0m", code.trim());
             },
             Err(e) => {
-                println!("Parser errored as expected: {e}");
+                println!("Parser errored as expected:\n\x1b[32;1m{e}\x1b[0m");
             },
         }
     }
@@ -70,22 +69,24 @@ mod tests {
     }
 
     #[test]
-    fn test_single_statement() {
-        parse(Rule::statement, r#"cur_branch"#);
-        parse(Rule::statement, r#" cur_branch "#);
-        parse(Rule::statement, r#"run git checkout main"#);
-        parse(Rule::statement, r#" run git checkout main "#);
+    fn test_expression() {
+        parse(Rule::expression, r#"cur_branch"#);
+        parse(Rule::expression, r#" cur_branch "#);
+        parse(Rule::expression, r#"run git checkout main"#);
+        parse(Rule::expression, r#" run git checkout main "#);
     }
 
     #[test]
     fn test_lexical_declaration() {
         fail(Rule::lexical_declaration, "letfoo=bar");
         fail(Rule::lexical_declaration, "letfoo = bar");
-        parse(Rule::lexical_declaration, "let foo = bar");
-        parse(Rule::lexical_declaration, "let foo=bar");
-        parse(Rule::lexical_declaration, r#"let foo = "string""#);
-        parse(Rule::lexical_declaration, r#"let foo = { bar; foo }"#);
-        parse(Rule::lexical_declaration, r#"let foo = let bar = baz"#);
+        fail(Rule::lexical_declaration, r#"let foo = let bar = baz;"#);
+        parse(Rule::lexical_declaration, "let foo = bar;");
+        parse(Rule::lexical_declaration, "let foo=bar;");
+        parse(Rule::lexical_declaration, r#"let foo = "string";"#);
+        parse(Rule::lexical_declaration, r#"let foo = { bar; foo };"#);
+        parse(Rule::lexical_declaration, r#"let foo = { bar; foo ;};"#);
+        parse(Rule::lexical_declaration, r#"let foo = { bar; foo; };"#);
     }
 
     #[test]
@@ -126,13 +127,19 @@ mod tests {
         fail(Rule::function_declaration, "pubfnfoo(){}");
         fail(Rule::function_declaration, "pub fnfoo(){}");
         fail(Rule::function_declaration, "pubfn foo(){}");
-        parse(
+        fail(
             Rule::function_declaration,
             r#"
             fn grom() {
               fn gpm;
-              pub fn gpm;
-
+              pub fn gpm
+            }
+            "#,
+        );
+        parse(
+            Rule::function_declaration,
+            r#"
+            fn grom() {
               pub fn other_fn() {
                   foo;
               }
@@ -146,8 +153,6 @@ mod tests {
             r#"
             pub fn grom() {
               gpm;
-              fn gpm;
-              pub fn gpm;
 
               pub fn other_fn() {
                   foo;
