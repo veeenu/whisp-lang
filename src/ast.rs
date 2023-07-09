@@ -1,4 +1,6 @@
-use pest::{Parser, Span};
+use std::ops::Deref;
+
+use pest::Parser;
 use thiserror::Error;
 
 use crate::parser::*;
@@ -15,8 +17,6 @@ pub enum Error {
     Unexpected(String),
     #[error("unexpected rule")]
     UnexpectedRule(Rule, usize, usize, usize, usize),
-    // #[error("generic")]
-    // Generic(String),
 }
 
 impl From<pest::error::Error<Rule>> for Error {
@@ -54,6 +54,15 @@ impl TryFrom<Pair<'_>> for Program {
             .map(FunctionDeclaration::try_from)
             .collect::<Result<Vec<_>>>()
             .map(Self)
+    }
+}
+
+impl Program {
+    pub fn parse(code: &str) -> Result<Self> {
+        WhispParser::parse(Rule::program, code.trim()).map_err(Error::from).and_then(|mut pairs| {
+            let pair = pairs.next().unwrap();
+            Program::try_from(pair)
+        })
     }
 }
 
@@ -171,6 +180,14 @@ impl TryFrom<Pair<'_>> for Identifier {
             Rule::identifier => Ok(Self(value.as_str().to_string())),
             _ => Err(Error::unexpected_rule(value)),
         }
+    }
+}
+
+impl Deref for Identifier {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_str()
     }
 }
 
@@ -320,6 +337,7 @@ impl TryFrom<Pair<'_>> for WhispString {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pest::Parser;
 
     fn try_parse<'a, T>(rule: Rule, code: &'a str) -> Result<T>
     where
