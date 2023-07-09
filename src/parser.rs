@@ -95,6 +95,7 @@ mod tests {
 
     #[test]
     fn test_function_call() {
+        parse(Rule::function_call, r#"print Ciao, come stai?"#);
         parse(Rule::function_call, r#"run git checkout { cur_branch }"#);
         parse(Rule::function_call, r#"run git "checkout" { cur_branch }"#);
         parse(Rule::function_call, "run git r#\"checkout\"# { cur_branch }");

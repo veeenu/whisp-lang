@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::ops::Deref;
 use std::rc::{Rc, Weak};
 
@@ -27,6 +28,15 @@ pub enum Object {
     Builtin(Builtin),
 }
 
+impl Display for Object {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Object::String(s) => write!(f, "{}", s.deref()),
+            x => write!(f, "{x:#?}"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Function {
     formal_parameters: Vec<Identifier>,
@@ -50,8 +60,26 @@ impl Builtin {
         }
     }
 
-    pub fn run(&self, arguments: Vec<Rc<Object>>) -> Object {
-        todo!()
+    pub fn run(&self, arguments: Vec<Rc<Object>>) -> Rc<Object> {
+        match self {
+            Builtin::Run => self.call_print(arguments),
+            Builtin::Spawn => self.call_print(arguments),
+            Builtin::Print => self.call_print(arguments),
+        }
+    }
+
+    fn call_print(&self, arguments: Vec<Rc<Object>>) -> Rc<Object> {
+        if arguments.is_empty() {
+            return Rc::new(Object::Option(None));
+        }
+
+        let mut arguments = arguments.into_iter();
+        print!("{}", arguments.next().unwrap());
+        for arg in arguments {
+            print!(" {arg}");
+        }
+        println!();
+        Rc::new(Object::Option(None))
     }
 }
 
@@ -63,9 +91,16 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new(code: &str) -> Result<Self> {
         let program = Program::parse(code).map_err(Error::from)?;
-        let stack = ScopeStack::new();
+        let mut stack = ScopeStack::new();
+        for decl in &program {
+            stack.function_declaration(decl);
+        }
 
         Ok(Self { stack })
+    }
+
+    pub fn call_function(&mut self, name: &str) -> Rc<Object> {
+        self.stack.function_call(&FunctionCall::new(name, Vec::new()))
     }
 }
 
@@ -189,12 +224,12 @@ impl ScopeStack {
         self.push();
 
         let return_value = if let Some(builtin) = Builtin::matches(call.function_name()) {
-            Rc::new(builtin.run(arguments))
+            builtin.run(arguments)
         } else if let Some(lookup) = self.lookup(call.function_name()) {
             let lookup = Weak::upgrade(&lookup).unwrap();
 
             match lookup.deref() {
-                Object::String(s) => Rc::clone(&lookup),
+                Object::String(_) => Rc::clone(&lookup),
                 Object::Function(function) => {
                     for (identifier, value) in function.formal_parameters.iter().zip(arguments) {
                         self.current().declare_object(identifier, value);
@@ -215,6 +250,42 @@ impl ScopeStack {
 
         self.pop();
 
-        todo!()
+        return_value
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_run_program() {
+        let mut program = Interpreter::new(
+            r#"
+            pub fn main() {
+                print Ciao, come stai?;
+            }
+            "#
+        ).unwrap();
+
+        // let mut program = Interpreter::new(
+        //     r#"
+        //     pub fn main() {
+        //         fn call_ls(path) {
+        //             let output = run ls (path);
+        //             print Output is (output);
+        //             output
+        //         }
+        //
+        //         print Ciao, come stai?;
+        //         let repo_dir = run git rev-parse --show-toplevel;
+        //         print Current directory is {repo_dir};
+        //         let other_output = call_ls {repo_dir};
+        //         print Other output is (other_output);
+        //     }
+        //     "#
+        // ).unwrap();
+
+        program.call_function("main");
     }
 }

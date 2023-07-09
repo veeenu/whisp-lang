@@ -57,6 +57,15 @@ impl TryFrom<Pair<'_>> for Program {
     }
 }
 
+impl<'a> IntoIterator for &'a Program {
+    type Item = &'a FunctionDeclaration;
+    type IntoIter = std::slice::Iter<'a, FunctionDeclaration>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 impl Program {
     pub fn parse(code: &str) -> Result<Self> {
         WhispParser::parse(Rule::program, code.trim()).map_err(Error::from).and_then(|mut pairs| {
@@ -323,6 +332,10 @@ impl TryFrom<Pair<'_>> for FunctionCall {
 }
 
 impl FunctionCall {
+    pub fn new<S: Into<String>>(function_name: S, arguments: Vec<Expression>) -> Self {
+        Self { function_name: Identifier(function_name.into()), arguments }
+    }
+
     pub fn function_name(&self) -> &Identifier {
         &self.function_name
     }
@@ -340,6 +353,14 @@ impl WhispString {
     /// Create a new [`WhispString`] from any string type.
     pub fn new<S: Into<String>>(s: S) -> Self {
         Self(s.into())
+    }
+}
+
+impl Deref for WhispString {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_str()
     }
 }
 
