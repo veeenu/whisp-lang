@@ -226,6 +226,7 @@ mod tests {
                 run program3;
                 break;
                 break foo;
+                break "foo";
             }
             "#,
         );

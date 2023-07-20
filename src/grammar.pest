@@ -27,7 +27,7 @@ statement_block = !{
 }
 
 statement = !{
-  function_declaration | lexical_declaration | break
+  function_declaration | lexical_declaration | break_stmt
 }
 
 expression = !{
@@ -51,10 +51,10 @@ function_call = ${
   | identifier
 }
 
-quoted_string = _{ ("\"" ~ quoted_string_content ~ "\"") }
+quoted_string = { ("\"" ~ quoted_string_content ~ "\"") }
 quoted_string_content = { (!("\"") ~ ANY)* }
 
-raw_quoted_string = _{ "r#\"" ~ raw_quoted_string_content ~ "\"#"}
+raw_quoted_string = { "r#\"" ~ raw_quoted_string_content ~ "\"#"}
 raw_quoted_string_content = { (!("\"#") ~ ANY)* }
 
 unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
@@ -81,7 +81,7 @@ loop_expr = ${
   "loop" ~ WHITESPACE* ~ statement_block
 }
 
-break = ${
+break_stmt = ${
   "break" ~ (WHITESPACE+ ~ expression)? ~ ";"?
 }
 

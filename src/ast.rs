@@ -244,6 +244,7 @@ impl StatementBlock {
 pub enum Statement {
     LexicalDeclaration(LexicalDeclaration),
     FunctionDeclaration(FunctionDeclaration),
+    Break(Option<Expression>),
 }
 
 impl TryFrom<Pair<'_>> for Statement {
@@ -258,6 +259,9 @@ impl TryFrom<Pair<'_>> for Statement {
             Rule::lexical_declaration => {
                 LexicalDeclaration::try_from(value).map(Self::LexicalDeclaration)
             },
+            Rule::break_stmt => {
+                value.into_inner().next().map(Expression::try_from).transpose().map(Self::Break)
+            },
             _ => Err(Error::unexpected_rule(value)),
         }
     }
@@ -268,6 +272,8 @@ pub enum Expression {
     String(WhispString),
     FunctionCall(FunctionCall),
     StatementBlock(Box<StatementBlock>),
+    IfExpr(Vec<Condition>),
+    Loop(Box<StatementBlock>),
 }
 
 impl TryFrom<Pair<'_>> for Expression {
@@ -284,8 +290,97 @@ impl TryFrom<Pair<'_>> for Expression {
                 Ok(Self::String(WhispString::try_from(value)?))
             },
             Rule::function_call => Ok(Self::FunctionCall(FunctionCall::try_from(value)?)),
+            Rule::if_expr => Ok(Self::IfExpr(Conditions::try_from(value).map(|c| c.0)?)),
+            Rule::loop_expr => {
+                let statement_block = value
+                    .into_inner()
+                    .next()
+                    .ok_or_else(|| {
+                        Error::Unexpected("No statement block found for loop".to_string())
+                    })
+                    .and_then(StatementBlock::try_from)?;
+                Ok(Self::Loop(Box::new(statement_block)))
+            },
             _ => Err(Error::unexpected_rule(value)),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Condition {
+    Unconditional(StatementBlock),
+    Conditional(Expression, StatementBlock),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Conditions(Vec<Condition>);
+
+impl TryFrom<Pair<'_>> for Conditions {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self> {
+        let mut conditions = Vec::new();
+
+        let mut children = match value.as_rule() {
+            Rule::if_expr => value.into_inner(),
+            _ => return Err(Error::unexpected_rule(value)),
+        };
+
+        let if_expr = children
+            .next()
+            .ok_or_else(|| {
+                Error::Unexpected("If expression has no condition to evaluate".to_string())
+            })
+            .and_then(Expression::try_from)?;
+
+        let if_statement_block = children
+            .next()
+            .ok_or_else(|| Error::Unexpected("If expression has no statement block".to_string()))
+            .and_then(StatementBlock::try_from)?;
+
+        conditions.push(Condition::Conditional(if_expr, if_statement_block));
+
+        loop {
+            match children.next() {
+                None => break,
+                Some(else_if_expr) if else_if_expr.as_rule() == Rule::else_if_expr => {
+                    let mut children = else_if_expr.into_inner();
+                    let else_if_expr = children
+                        .next()
+                        .ok_or_else(|| {
+                            Error::Unexpected(
+                                "Else-if expression has no condition to evaluate".to_string(),
+                            )
+                        })
+                        .and_then(Expression::try_from)?;
+
+                    let else_if_statement_block = children
+                        .next()
+                        .ok_or_else(|| {
+                            Error::Unexpected(
+                                "Else-if expression has no statement block".to_string(),
+                            )
+                        })
+                        .and_then(StatementBlock::try_from)?;
+
+                    conditions.push(Condition::Conditional(else_if_expr, else_if_statement_block));
+                },
+                Some(else_expr) if else_expr.as_rule() == Rule::else_expr => {
+                    let else_statement_block = else_expr
+                        .into_inner()
+                        .next()
+                        .ok_or_else(|| {
+                            Error::Unexpected("Else expression has no statement block".to_string())
+                        })
+                        .and_then(StatementBlock::try_from)?;
+
+                    conditions.push(Condition::Unconditional(else_statement_block));
+                },
+                Some(x) => return Err(Error::unexpected_rule(x)),
+            }
+        }
+
+        Ok(Self(conditions))
     }
 }
 
