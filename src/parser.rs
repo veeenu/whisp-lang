@@ -170,6 +170,72 @@ mod tests {
     }
 
     #[test]
+    fn test_if_expr() {
+        parse(
+            Rule::if_expr,
+            r#"
+            if (run program1) {
+                run program2
+            }
+            "#,
+        );
+        parse(
+            Rule::if_expr,
+            r#"
+            if (run program1) {
+                run program2
+            } else {
+                run program3
+            }
+            "#,
+        );
+        parse(
+            Rule::if_expr,
+            r#"
+            if (run program1) {
+                run program2
+            } else if (run program3) {
+                run program4
+            } else {
+                run program5
+            }
+            "#,
+        );
+        fail(
+            Rule::statement_block,
+            r#"
+            {
+                if (run program1) {
+                    run program2
+                } else {
+                    run program4
+                } else if (run program2) {
+                    run program5
+                }
+            }
+            "#,
+        );
+    }
+
+    #[test]
+    fn test_loop() {
+        parse(
+            Rule::loop_expr,
+            r#"
+            loop {
+                run program3;
+                break;
+                break foo;
+            }
+            "#,
+        );
+        parse(Rule::loop_expr, "loop { break }");
+        parse(Rule::loop_expr, "loop { break; }");
+        parse(Rule::loop_expr, "loop { break foo }");
+        parse(Rule::loop_expr, "loop { break foo; }");
+    }
+
+    #[test]
     fn test_program() {
         parse(Rule::program, SAMPLE1);
     }

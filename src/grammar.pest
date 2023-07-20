@@ -27,7 +27,7 @@ statement_block = !{
 }
 
 statement = !{
-  function_declaration | lexical_declaration
+  function_declaration | lexical_declaration | break
 }
 
 expression = !{
@@ -35,7 +35,9 @@ expression = !{
   raw_quoted_string |
   statement_block | 
   parenthesis_expression |
-  function_call
+  function_call |
+  if_expr |
+  loop_expr
 }
 
 parenthesis_expression = _{ "(" ~ expression ~ ")" }
@@ -57,6 +59,32 @@ raw_quoted_string_content = { (!("\"#") ~ ANY)* }
 
 unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
 
+if_expr = ${
+  "if" ~ WHITESPACE+ ~
+  parenthesis_expression ~ WHITESPACE* ~
+  statement_block ~
+  (WHITESPACE* ~ else_if_expr)* ~
+  (WHITESPACE* ~ else_expr)?
+}
+
+else_if_expr = ${
+  "else" ~ WHITESPACE+ ~ "if" ~ WHITESPACE* ~
+  parenthesis_expression ~ WHITESPACE* ~
+  statement_block
+}
+
+else_expr = ${
+  "else" ~ WHITESPACE* ~ statement_block
+}
+
+loop_expr = ${
+  "loop" ~ WHITESPACE* ~ statement_block
+}
+
+break = ${
+  "break" ~ (WHITESPACE+ ~ expression)? ~ ";"?
+}
+
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 RESERVED = _{";" | "{" | "}" | "(" | ")" | "\""}
-RESERVED_IDENTIFIER = @{ "pub" | "fn" | "let" }
+RESERVED_IDENTIFIER = @{ "if" | "else" | "loop" | "break" | "fn" | "let" }
