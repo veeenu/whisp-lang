@@ -12,14 +12,11 @@ lexical_declaration = ${
 }
 
 function_declaration = ${
-  (visibility_modifier ~ WHITESPACE+)? ~
   "fn" ~ WHITESPACE+ ~
   identifier ~ WHITESPACE* ~
   formal_parameters ~ WHITESPACE* ~
   statement_block
 }
-
-visibility_modifier = @{ "pub" }
 
 identifier = @{ (!RESERVED_IDENTIFIER ~ (ASCII_ALPHANUMERIC | "_")+) }
 

@@ -200,7 +200,6 @@ impl ScopeStack {
     pub fn function_declaration(
         &mut self,
         FunctionDeclaration { 
-            visibility_modifier, 
             identifier, 
             formal_parameters, 
             statement_block 
@@ -262,7 +261,7 @@ mod tests {
     fn test_run_program() {
         let mut program = Interpreter::new(
             r#"
-            pub fn main() {
+            fn main() {
                 print Ciao, come stai?;
             }
             "#

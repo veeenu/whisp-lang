@@ -1,9 +1,9 @@
-pub fn grom() {
+fn grom() {
   gpm;
   run git rebase origin main;
 }
 
-pub fn gpm() {
+fn gpm() {
   let cur_branch = { run git branch --show-current };
   run git checkout main;
   run git fetch;
@@ -11,10 +11,10 @@ pub fn gpm() {
   run git checkout (cur_branch);
 }
 
-pub fn ct(test_filter, extra_params) {
+fn ct(test_filter, extra_params) {
   run cargo test { test_filter } -- (extra_params)
 }
 
-pub fn ctnc(test_filter) {
+fn ctnc(test_filter) {
   ct { test_filter } --nocapture
 }

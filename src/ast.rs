@@ -110,7 +110,6 @@ impl TryFrom<Pair<'_>> for LexicalDeclaration {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDeclaration {
-    pub visibility_modifier: VisibilityModifier,
     pub identifier: Identifier,
     pub formal_parameters: Vec<Identifier>,
     pub statement_block: StatementBlock,
@@ -136,17 +135,6 @@ impl TryFrom<Pair<'_>> for FunctionDeclaration {
             _ => return Err(Error::unexpected_rule(value)),
         };
 
-        let visibility_modifier =
-            if let Some(Rule::visibility_modifier) = children.peek().map(|pair| pair.as_rule()) {
-                // Consume the visibility modifier token
-                match children.next().unwrap().as_str() {
-                    "pub" => VisibilityModifier::Public,
-                    x => return Err(Error::Unexpected(format!("visibility modifier {x}"))),
-                }
-            } else {
-                VisibilityModifier::Private
-            };
-
         let identifier = children
             .next()
             .ok_or_else(|| {
@@ -168,14 +156,8 @@ impl TryFrom<Pair<'_>> for FunctionDeclaration {
             })
             .and_then(StatementBlock::try_from)?;
 
-        Ok(Self { visibility_modifier, identifier, formal_parameters, statement_block })
+        Ok(Self { identifier, formal_parameters, statement_block })
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VisibilityModifier {
-    Public,
-    Private,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
