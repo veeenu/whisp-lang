@@ -34,19 +34,30 @@ statement = !{
 }
 
 expression = !{
-  function_call | statement_block | string | parenthesis_expression
+  quoted_string |
+  raw_quoted_string |
+  statement_block | 
+  parenthesis_expression |
+  function_call
 }
 
 parenthesis_expression = _{ "(" ~ expression ~ ")" }
 
 function_call = ${
-  (identifier ~ WHITESPACE+ ~ (expression ~ WHITESPACE+)* ~ expression?)
+  (
+    identifier ~ WHITESPACE+ ~ 
+    ((unquoted_string | expression) ~ WHITESPACE+)* ~ 
+    (unquoted_string | expression)?
+  )
+  | identifier
 }
 
 quoted_string = _{ ("\"" ~ quoted_string_content ~ "\"") }
 quoted_string_content = { (!("\"") ~ ANY)* }
+
 raw_quoted_string = _{ "r#\"" ~ raw_quoted_string_content ~ "\"#"}
 raw_quoted_string_content = { (!("\"#") ~ ANY)* }
+
 unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }

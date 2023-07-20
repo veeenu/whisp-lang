@@ -298,7 +298,9 @@ impl TryFrom<Pair<'_>> for Expression {
             Rule::statement_block => {
                 Ok(Self::StatementBlock(Box::new(StatementBlock::try_from(value)?)))
             },
-            Rule::string => Ok(Self::String(WhispString::try_from(value)?)),
+            Rule::quoted_string | Rule::raw_quoted_string => {
+                Ok(Self::String(WhispString::try_from(value)?))
+            },
             Rule::function_call => Ok(Self::FunctionCall(FunctionCall::try_from(value)?)),
             _ => Err(Error::unexpected_rule(value)),
         }
@@ -325,7 +327,13 @@ impl TryFrom<Pair<'_>> for FunctionCall {
             .ok_or_else(|| Error::Unexpected("Function has no name".to_string()))
             .and_then(Identifier::try_from)?;
 
-        let arguments = children.map(Expression::try_from).collect::<Result<Vec<_>>>()?;
+        let arguments = children
+            .map(|argument| match argument.as_rule() {
+                Rule::unquoted_string => WhispString::try_from(argument).map(Expression::String),
+                Rule::expression => Expression::try_from(argument),
+                _ => Err(Error::unexpected_rule(argument)),
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self { function_name, arguments })
     }
@@ -370,13 +378,13 @@ impl TryFrom<Pair<'_>> for WhispString {
     fn try_from(value: Pair<'_>) -> Result<Self> {
         match value.as_rule() {
             // Recurse and evaluate inner node types.
-            Rule::string | Rule::quoted_string_block | Rule::raw_quoted_string_block => {
+            Rule::quoted_string | Rule::raw_quoted_string => {
                 Self::try_from(value.into_inner().next().unwrap())
             },
             // Evaluate string directly.
-            Rule::quoted_string | Rule::raw_quoted_string | Rule::unquoted_string => {
-                Ok(Self(value.as_str().to_string()))
-            },
+            Rule::quoted_string_content
+            | Rule::raw_quoted_string_content
+            | Rule::unquoted_string => Ok(Self(value.as_str().to_string())),
             _ => Err(Error::unexpected_rule(value)),
         }
     }
@@ -412,18 +420,31 @@ mod tests {
 
     #[test]
     fn test_string() {
-        assert_match(Rule::string, r#""string""#, WhispString::new("string"));
-        assert_match(Rule::string, r#""another string""#, WhispString::new("another string"));
-        assert_match(Rule::string, r#"another_string"#, WhispString::new("another_string"));
+        assert_match(Rule::quoted_string, r#""string""#, WhispString::new("string"));
         assert_match(
-            Rule::string,
+            Rule::quoted_string,
+            r#""another string""#,
+            WhispString::new("another string"),
+        );
+        assert_match(
+            Rule::unquoted_string,
+            r#"another_string"#,
+            WhispString::new("another_string"),
+        );
+        assert_match(
+            Rule::unquoted_string,
             r#"another_string!_no,-seriously"#,
             WhispString::new("another_string!_no,-seriously"),
         );
         assert_match(
-            Rule::string,
+            Rule::raw_quoted_string,
             "r#\"I am a raw string!!!{};\"#",
             WhispString::new("I am a raw string!!!{};"),
+        );
+        assert_match(
+            Rule::raw_quoted_string,
+            "r#\"I am a r#\"raw string!!!{};\"#",
+            WhispString::new("I am a r#\"raw string!!!{};"),
         );
     }
 
