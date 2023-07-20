@@ -43,11 +43,10 @@ function_call = ${
   (identifier ~ WHITESPACE+ ~ (expression ~ WHITESPACE+)* ~ expression?)
 }
 
-string = ${ quoted_string_block | raw_quoted_string_block | unquoted_string }
-quoted_string_block = _{ ("\"" ~ quoted_string ~ "\"") }
-quoted_string = { (!("\"") ~ ANY)* }
-raw_quoted_string_block = _{ "r#\"" ~ raw_quoted_string ~ "\"#"}
-raw_quoted_string = { (!("\"#") ~ ANY)* }
+quoted_string = _{ ("\"" ~ quoted_string_content ~ "\"") }
+quoted_string_content = { (!("\"") ~ ANY)* }
+raw_quoted_string = _{ "r#\"" ~ raw_quoted_string_content ~ "\"#"}
+raw_quoted_string_content = { (!("\"#") ~ ANY)* }
 unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }

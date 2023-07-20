@@ -1,7 +1,7 @@
 use pest_derive::Parser;
 
 #[derive(Parser)]
-#[grammar = "grammar.peg"]
+#[grammar = "grammar.pest"]
 pub struct WhispParser;
 
 #[cfg(test)]
