@@ -110,7 +110,6 @@ impl TryFrom<Pair<'_>> for LexicalDeclaration {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDeclaration {
-    pub visibility_modifier: VisibilityModifier,
     pub identifier: Identifier,
     pub formal_parameters: Vec<Identifier>,
     pub statement_block: StatementBlock,
@@ -136,17 +135,6 @@ impl TryFrom<Pair<'_>> for FunctionDeclaration {
             _ => return Err(Error::unexpected_rule(value)),
         };
 
-        let visibility_modifier =
-            if let Some(Rule::visibility_modifier) = children.peek().map(|pair| pair.as_rule()) {
-                // Consume the visibility modifier token
-                match children.next().unwrap().as_str() {
-                    "pub" => VisibilityModifier::Public,
-                    x => return Err(Error::Unexpected(format!("visibility modifier {x}"))),
-                }
-            } else {
-                VisibilityModifier::Private
-            };
-
         let identifier = children
             .next()
             .ok_or_else(|| {
@@ -168,14 +156,8 @@ impl TryFrom<Pair<'_>> for FunctionDeclaration {
             })
             .and_then(StatementBlock::try_from)?;
 
-        Ok(Self { visibility_modifier, identifier, formal_parameters, statement_block })
+        Ok(Self { identifier, formal_parameters, statement_block })
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VisibilityModifier {
-    Public,
-    Private,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -262,6 +244,7 @@ impl StatementBlock {
 pub enum Statement {
     LexicalDeclaration(LexicalDeclaration),
     FunctionDeclaration(FunctionDeclaration),
+    Break(Option<Expression>),
 }
 
 impl TryFrom<Pair<'_>> for Statement {
@@ -276,6 +259,9 @@ impl TryFrom<Pair<'_>> for Statement {
             Rule::lexical_declaration => {
                 LexicalDeclaration::try_from(value).map(Self::LexicalDeclaration)
             },
+            Rule::break_stmt => {
+                value.into_inner().next().map(Expression::try_from).transpose().map(Self::Break)
+            },
             _ => Err(Error::unexpected_rule(value)),
         }
     }
@@ -286,6 +272,8 @@ pub enum Expression {
     String(WhispString),
     FunctionCall(FunctionCall),
     StatementBlock(Box<StatementBlock>),
+    IfExpr(Vec<Condition>),
+    Loop(Box<StatementBlock>),
 }
 
 impl TryFrom<Pair<'_>> for Expression {
@@ -298,10 +286,101 @@ impl TryFrom<Pair<'_>> for Expression {
             Rule::statement_block => {
                 Ok(Self::StatementBlock(Box::new(StatementBlock::try_from(value)?)))
             },
-            Rule::string => Ok(Self::String(WhispString::try_from(value)?)),
+            Rule::quoted_string | Rule::raw_quoted_string => {
+                Ok(Self::String(WhispString::try_from(value)?))
+            },
             Rule::function_call => Ok(Self::FunctionCall(FunctionCall::try_from(value)?)),
+            Rule::if_expr => Ok(Self::IfExpr(Conditions::try_from(value).map(|c| c.0)?)),
+            Rule::loop_expr => {
+                let statement_block = value
+                    .into_inner()
+                    .next()
+                    .ok_or_else(|| {
+                        Error::Unexpected("No statement block found for loop".to_string())
+                    })
+                    .and_then(StatementBlock::try_from)?;
+                Ok(Self::Loop(Box::new(statement_block)))
+            },
             _ => Err(Error::unexpected_rule(value)),
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Condition {
+    Unconditional(StatementBlock),
+    Conditional(Expression, StatementBlock),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Conditions(Vec<Condition>);
+
+impl TryFrom<Pair<'_>> for Conditions {
+    type Error = Error;
+
+    fn try_from(value: Pair<'_>) -> Result<Self> {
+        let mut conditions = Vec::new();
+
+        let mut children = match value.as_rule() {
+            Rule::if_expr => value.into_inner(),
+            _ => return Err(Error::unexpected_rule(value)),
+        };
+
+        let if_expr = children
+            .next()
+            .ok_or_else(|| {
+                Error::Unexpected("If expression has no condition to evaluate".to_string())
+            })
+            .and_then(Expression::try_from)?;
+
+        let if_statement_block = children
+            .next()
+            .ok_or_else(|| Error::Unexpected("If expression has no statement block".to_string()))
+            .and_then(StatementBlock::try_from)?;
+
+        conditions.push(Condition::Conditional(if_expr, if_statement_block));
+
+        loop {
+            match children.next() {
+                None => break,
+                Some(else_if_expr) if else_if_expr.as_rule() == Rule::else_if_expr => {
+                    let mut children = else_if_expr.into_inner();
+                    let else_if_expr = children
+                        .next()
+                        .ok_or_else(|| {
+                            Error::Unexpected(
+                                "Else-if expression has no condition to evaluate".to_string(),
+                            )
+                        })
+                        .and_then(Expression::try_from)?;
+
+                    let else_if_statement_block = children
+                        .next()
+                        .ok_or_else(|| {
+                            Error::Unexpected(
+                                "Else-if expression has no statement block".to_string(),
+                            )
+                        })
+                        .and_then(StatementBlock::try_from)?;
+
+                    conditions.push(Condition::Conditional(else_if_expr, else_if_statement_block));
+                },
+                Some(else_expr) if else_expr.as_rule() == Rule::else_expr => {
+                    let else_statement_block = else_expr
+                        .into_inner()
+                        .next()
+                        .ok_or_else(|| {
+                            Error::Unexpected("Else expression has no statement block".to_string())
+                        })
+                        .and_then(StatementBlock::try_from)?;
+
+                    conditions.push(Condition::Unconditional(else_statement_block));
+                },
+                Some(x) => return Err(Error::unexpected_rule(x)),
+            }
+        }
+
+        Ok(Self(conditions))
     }
 }
 
@@ -325,7 +404,13 @@ impl TryFrom<Pair<'_>> for FunctionCall {
             .ok_or_else(|| Error::Unexpected("Function has no name".to_string()))
             .and_then(Identifier::try_from)?;
 
-        let arguments = children.map(Expression::try_from).collect::<Result<Vec<_>>>()?;
+        let arguments = children
+            .map(|argument| match argument.as_rule() {
+                Rule::unquoted_string => WhispString::try_from(argument).map(Expression::String),
+                Rule::expression => Expression::try_from(argument),
+                _ => Err(Error::unexpected_rule(argument)),
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self { function_name, arguments })
     }
@@ -370,13 +455,13 @@ impl TryFrom<Pair<'_>> for WhispString {
     fn try_from(value: Pair<'_>) -> Result<Self> {
         match value.as_rule() {
             // Recurse and evaluate inner node types.
-            Rule::string | Rule::quoted_string_block | Rule::raw_quoted_string_block => {
+            Rule::quoted_string | Rule::raw_quoted_string => {
                 Self::try_from(value.into_inner().next().unwrap())
             },
             // Evaluate string directly.
-            Rule::quoted_string | Rule::raw_quoted_string | Rule::unquoted_string => {
-                Ok(Self(value.as_str().to_string()))
-            },
+            Rule::quoted_string_content
+            | Rule::raw_quoted_string_content
+            | Rule::unquoted_string => Ok(Self(value.as_str().to_string())),
             _ => Err(Error::unexpected_rule(value)),
         }
     }
@@ -412,18 +497,31 @@ mod tests {
 
     #[test]
     fn test_string() {
-        assert_match(Rule::string, r#""string""#, WhispString::new("string"));
-        assert_match(Rule::string, r#""another string""#, WhispString::new("another string"));
-        assert_match(Rule::string, r#"another_string"#, WhispString::new("another_string"));
+        assert_match(Rule::quoted_string, r#""string""#, WhispString::new("string"));
         assert_match(
-            Rule::string,
+            Rule::quoted_string,
+            r#""another string""#,
+            WhispString::new("another string"),
+        );
+        assert_match(
+            Rule::unquoted_string,
+            r#"another_string"#,
+            WhispString::new("another_string"),
+        );
+        assert_match(
+            Rule::unquoted_string,
             r#"another_string!_no,-seriously"#,
             WhispString::new("another_string!_no,-seriously"),
         );
         assert_match(
-            Rule::string,
+            Rule::raw_quoted_string,
             "r#\"I am a raw string!!!{};\"#",
             WhispString::new("I am a raw string!!!{};"),
+        );
+        assert_match(
+            Rule::raw_quoted_string,
+            "r#\"I am a r#\"raw string!!!{};\"#",
+            WhispString::new("I am a r#\"raw string!!!{};"),
         );
     }
 

@@ -1,13 +1,14 @@
 use std::fmt::Display;
 use std::ops::Deref;
 use std::rc::{Rc, Weak};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use ahash::AHashMap as HashMap;
 use thiserror::Error;
 
 use crate::ast::{
     Error as ParseError, Expression, FunctionCall, FunctionDeclaration, Identifier,
-    LexicalDeclaration, Program, Statement, StatementBlock, StatementBlockItem, WhispString,
+    LexicalDeclaration, Program, Statement, StatementBlock, StatementBlockItem, WhispString, Condition,
 };
 
 #[derive(Debug, Error)]
@@ -20,6 +21,7 @@ type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone)]
 pub enum Object {
+    Bool(bool),
     String(WhispString),
     List(Vec<Object>),
     Dict(HashMap<String, Object>),
@@ -48,6 +50,7 @@ pub enum Builtin {
     Run,
     Spawn,
     Print,
+    Check,
 }
 
 impl Builtin {
@@ -56,6 +59,7 @@ impl Builtin {
             "run" =>  Some( Builtin::Run ),
             "spawn" => Some( Builtin::Spawn ),
             "print" => Some( Builtin::Print ),
+            "check" => Some( Builtin::Check ),
             _ => None
         }
     }
@@ -65,6 +69,7 @@ impl Builtin {
             Builtin::Run => self.call_print(arguments),
             Builtin::Spawn => self.call_print(arguments),
             Builtin::Print => self.call_print(arguments),
+            Builtin::Check => self.call_check(arguments),
         }
     }
 
@@ -80,6 +85,10 @@ impl Builtin {
         }
         println!();
         Rc::new(Object::Option(None))
+    }
+
+    fn call_check(&self, _arguments: Vec<Rc<Object>>) -> Rc<Object> {
+        Rc::new(Object::Bool(true))
     }
 }
 
@@ -107,6 +116,7 @@ impl Interpreter {
 #[derive(Default, Debug)]
 pub struct Scope {
     names: HashMap<String, Rc<Object>>,
+    loop_semaphore: Rc<AtomicUsize>,
 }
 
 impl Scope {
@@ -160,7 +170,16 @@ impl ScopeStack {
     pub fn evaluate_statement_block(&mut self, block: &StatementBlock) -> Rc<Object> {
         for block_item in block {
             match block_item {
-                StatementBlockItem::Statement(statement) => self.evaluate_statement(statement),
+                StatementBlockItem::Statement(statement) => { 
+                    let statement_return = self.evaluate_statement(statement); 
+
+                    if let Statement::Break(_) = statement {
+                        self.current().loop_semaphore.fetch_sub(1, Ordering::SeqCst);
+                        return statement_return;
+                    } else {
+                        statement_return
+                    }
+                },
                 StatementBlockItem::Expression(expression) => self.evaluate_expression(expression),
             };
         }
@@ -176,9 +195,38 @@ impl ScopeStack {
         match statement {
             Statement::LexicalDeclaration(decl) => self.lexical_declaration(decl),
             Statement::FunctionDeclaration(decl) => self.function_declaration(decl),
+            Statement::Break(expr) => { 
+                if let Some(expr) = expr.as_ref() { return self.evaluate_expression(expr); }
+            }
         }
 
         Rc::new(Object::Option(None))
+    }
+
+    pub fn evaluate_if_expr(&mut self, expr: &[Condition]) -> Rc<Object> {
+        for cond in expr {
+            match cond {
+                Condition::Unconditional(statement_block) => return self.evaluate_statement_block(statement_block),
+                Condition::Conditional(expr, statement_block) => if let Object::Bool(true) = *self.evaluate_expression(expr) {
+                    return self.evaluate_statement_block(statement_block);
+
+                }
+            }
+        }
+
+        Rc::new(Object::Option(None))
+    }
+
+    pub fn evaluate_loop_expr(&mut self, block: &StatementBlock) -> Rc<Object> {
+        let semaphore = Rc::clone(&self.current().loop_semaphore);
+        let semaphore_value = semaphore.fetch_add(1, Ordering::SeqCst);
+        loop {
+            let value = self.evaluate_statement_block(block);
+            
+            if semaphore.load(Ordering::SeqCst) == semaphore_value {
+                return value;
+            }
+        }
     }
 
     pub fn evaluate_expression(&mut self, expr: &Expression) -> Rc<Object> {
@@ -186,6 +234,8 @@ impl ScopeStack {
             Expression::String(s) => Rc::new(Object::String(s.clone())),
             Expression::FunctionCall(function_call) => self.function_call(function_call),
             Expression::StatementBlock(block) => self.evaluate_statement_block(block),
+            Expression::IfExpr(if_expr) => self.evaluate_if_expr(if_expr),
+            Expression::Loop(loop_expr) => self.evaluate_loop_expr(loop_expr),
         }
     }
 
@@ -200,7 +250,6 @@ impl ScopeStack {
     pub fn function_declaration(
         &mut self,
         FunctionDeclaration { 
-            visibility_modifier, 
             identifier, 
             formal_parameters, 
             statement_block 
@@ -259,10 +308,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_run_program() {
+    fn test_run_hello_world() {
         let mut program = Interpreter::new(
             r#"
-            pub fn main() {
+            fn main() {
                 print Ciao, come stai?;
             }
             "#
@@ -286,6 +335,37 @@ mod tests {
         //     "#
         // ).unwrap();
 
+        program.call_function("main");
+    }
+
+    #[test]
+    fn test_run_program_with_ifs_and_loop() {
+        // This print is interpreted incorrectly: the first (foo) is evaluated but the 
+        // one in the statement block {foo} is not.
+        let mut program = Interpreter::new(
+            r#"
+            fn main() {
+                let foo = (loop {
+                    print Ciao, come stai?;
+                    break "ciao ciao";
+                });
+
+                if (check foo) {
+                    print "I should be printed";
+                } else {
+                    print "I shouldn't be printed";
+                };
+
+                if (foo) {
+                    print "I shouldn't be printed";
+                } else {
+                    print "I should be printed";
+                };
+
+                print (foo) {foo}
+            }
+            "#
+        ).unwrap();
         program.call_function("main");
     }
 }

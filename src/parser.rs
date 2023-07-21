@@ -1,7 +1,7 @@
 use pest_derive::Parser;
 
 #[derive(Parser)]
-#[grammar = "grammar.peg"]
+#[grammar = "grammar.pest"]
 pub struct WhispParser;
 
 #[cfg(test)]
@@ -61,11 +61,11 @@ mod tests {
 
     #[test]
     fn test_string() {
-        parse(Rule::string, r#""string""#);
-        parse(Rule::string, r#""another string""#);
-        parse(Rule::string, r#"another_string"#);
-        parse(Rule::string, r#"another_string!_no,-seriously"#);
-        parse(Rule::string, "r#\"I am a raw string!!!{};\"#");
+        parse(Rule::quoted_string, r#""string""#);
+        parse(Rule::quoted_string, r#""another string""#);
+        parse(Rule::unquoted_string, r#"another_string"#);
+        parse(Rule::unquoted_string, r#"another_string!_no,-seriously"#);
+        parse(Rule::raw_quoted_string, "r#\"I am a raw string!!!{};\"#");
     }
 
     #[test]
@@ -83,7 +83,7 @@ mod tests {
         fail(Rule::lexical_declaration, "letfoo=bar");
         fail(Rule::lexical_declaration, "letfoo = bar");
         fail(Rule::lexical_declaration, r#"let foo = let bar = baz;"#);
-        fail(Rule::lexical_declaration, r#"let foo = pub fn bar() {}"#);
+        fail(Rule::lexical_declaration, r#"let foo = fn bar() {}"#);
         parse(Rule::lexical_declaration, "let foo = bar;");
         parse(Rule::lexical_declaration, "let foo=bar;");
         parse(Rule::lexical_declaration, r#"let foo = "string";"#);
@@ -128,15 +128,16 @@ mod tests {
 
     #[test]
     fn test_function_declaration() {
-        fail(Rule::function_declaration, "pubfnfoo(){}");
-        fail(Rule::function_declaration, "pub fnfoo(){}");
-        fail(Rule::function_declaration, "pubfn foo(){}");
+        fail(Rule::function_declaration, "fnfoo(){}");
+        parse(Rule::function_declaration, "fn foo(){}");
+        parse(Rule::function_declaration, "fn foo() {}");
+        parse(Rule::function_declaration, "fn foo ( ) {}");
         fail(
             Rule::function_declaration,
             r#"
             fn grom() {
               fn gpm;
-              pub fn gpm
+              fn gpm
             }
             "#,
         );
@@ -144,7 +145,7 @@ mod tests {
             Rule::function_declaration,
             r#"
             fn grom() {
-              pub fn other_fn() {
+              fn other_fn() {
                   foo;
               }
 
@@ -155,10 +156,10 @@ mod tests {
         parse(
             Rule::function_declaration,
             r#"
-            pub fn grom() {
+            fn grom() {
               gpm;
 
-              pub fn other_fn() {
+              fn other_fn() {
                   foo;
               }
 
@@ -166,6 +167,73 @@ mod tests {
             }
             "#,
         );
+    }
+
+    #[test]
+    fn test_if_expr() {
+        parse(
+            Rule::if_expr,
+            r#"
+            if (run program1) {
+                run program2
+            }
+            "#,
+        );
+        parse(
+            Rule::if_expr,
+            r#"
+            if (run program1) {
+                run program2
+            } else {
+                run program3
+            }
+            "#,
+        );
+        parse(
+            Rule::if_expr,
+            r#"
+            if (run program1) {
+                run program2
+            } else if (run program3) {
+                run program4
+            } else {
+                run program5
+            }
+            "#,
+        );
+        fail(
+            Rule::statement_block,
+            r#"
+            {
+                if (run program1) {
+                    run program2
+                } else {
+                    run program4
+                } else if (run program2) {
+                    run program5
+                }
+            }
+            "#,
+        );
+    }
+
+    #[test]
+    fn test_loop() {
+        parse(
+            Rule::loop_expr,
+            r#"
+            loop {
+                run program3;
+                break;
+                break foo;
+                break "foo";
+            }
+            "#,
+        );
+        parse(Rule::loop_expr, "loop { break }");
+        parse(Rule::loop_expr, "loop { break; }");
+        parse(Rule::loop_expr, "loop { break foo }");
+        parse(Rule::loop_expr, "loop { break foo; }");
     }
 
     #[test]

@@ -1,0 +1,90 @@
+program = {
+  SOI ~ 
+  function_declaration* ~ 
+  EOI 
+}
+
+lexical_declaration = ${
+  "let" ~ WHITESPACE+ ~ 
+  identifier ~ WHITESPACE* ~
+  "=" ~ WHITESPACE* ~ 
+  expression ~ WHITESPACE* ~ ";"
+}
+
+function_declaration = ${
+  "fn" ~ WHITESPACE+ ~
+  identifier ~ WHITESPACE* ~
+  formal_parameters ~ WHITESPACE* ~
+  statement_block
+}
+
+identifier = @{ (!RESERVED_IDENTIFIER ~ (ASCII_ALPHANUMERIC | "_")+) }
+
+formal_parameters = !{ "(" ~ (identifier ~ ",")* ~ (identifier ~ ","?)? ~ ")" }
+
+statement_block = !{
+  "{" ~ (statement | (expression ~ ";"))* ~ #tail_expr = expression? ~ "}"
+}
+
+statement = !{
+  function_declaration | lexical_declaration | break_stmt
+}
+
+expression = !{
+  quoted_string |
+  raw_quoted_string |
+  statement_block | 
+  parenthesis_expression |
+  function_call |
+  if_expr |
+  loop_expr
+}
+
+parenthesis_expression = _{ "(" ~ expression ~ ")" }
+
+function_call = ${
+  (
+    identifier ~ WHITESPACE+ ~ 
+    ((unquoted_string | expression) ~ WHITESPACE+)* ~ 
+    (unquoted_string | expression)?
+  )
+  | identifier
+}
+
+quoted_string = { ("\"" ~ quoted_string_content ~ "\"") }
+quoted_string_content = { (!("\"") ~ ANY)* }
+
+raw_quoted_string = { "r#\"" ~ raw_quoted_string_content ~ "\"#"}
+raw_quoted_string_content = { (!("\"#") ~ ANY)* }
+
+unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
+
+if_expr = ${
+  "if" ~ WHITESPACE+ ~
+  parenthesis_expression ~ WHITESPACE* ~
+  statement_block ~
+  (WHITESPACE* ~ else_if_expr)* ~
+  (WHITESPACE* ~ else_expr)?
+}
+
+else_if_expr = ${
+  "else" ~ WHITESPACE+ ~ "if" ~ WHITESPACE* ~
+  parenthesis_expression ~ WHITESPACE* ~
+  statement_block
+}
+
+else_expr = ${
+  "else" ~ WHITESPACE* ~ statement_block
+}
+
+loop_expr = ${
+  "loop" ~ WHITESPACE* ~ statement_block
+}
+
+break_stmt = ${
+  "break" ~ (WHITESPACE+ ~ expression)? ~ ";"?
+}
+
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+RESERVED = _{";" | "{" | "}" | "(" | ")" | "\""}
+RESERVED_IDENTIFIER = @{ "if" | "else" | "loop" | "break" | "fn" | "let" }
