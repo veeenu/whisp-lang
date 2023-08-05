@@ -1,7 +1,6 @@
 use std::fmt::Display;
 use std::ops::Deref;
 use std::rc::{Rc, Weak};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use ahash::AHashMap as HashMap;
 use thiserror::Error;
@@ -92,6 +91,30 @@ impl Builtin {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum StatementValue {
+    BreakWith(Rc<Object>),
+    Break,
+    Continue,
+}
+
+#[derive(Debug, Clone)]
+pub enum StatementBlockValue {
+    BreakWith(Rc<Object>),
+    Break,
+    Value(Rc<Object>),
+}
+
+impl From<StatementBlockValue> for Rc<Object> {
+    fn from(value: StatementBlockValue) -> Self {
+        match value {
+            StatementBlockValue::BreakWith(v) => v,
+            StatementBlockValue::Break => Rc::new(Object::Option(None)),
+            StatementBlockValue::Value(v) => v,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Interpreter {
     stack: ScopeStack,
@@ -116,7 +139,6 @@ impl Interpreter {
 #[derive(Default, Debug)]
 pub struct Scope {
     names: HashMap<String, Rc<Object>>,
-    loop_semaphore: Rc<AtomicUsize>,
 }
 
 impl Scope {
@@ -167,48 +189,46 @@ impl ScopeStack {
         self.0.iter_mut().rev().find_map(|scope| scope.lookup(identifier))
     }
 
-    pub fn evaluate_statement_block(&mut self, block: &StatementBlock) -> Rc<Object> {
+    pub fn evaluate_statement_block(&mut self, block: &StatementBlock) -> StatementBlockValue {
         for block_item in block {
             match block_item {
-                StatementBlockItem::Statement(statement) => { 
-                    let statement_return = self.evaluate_statement(statement); 
-
-                    if let Statement::Break(_) = statement {
-                        self.current().loop_semaphore.fetch_sub(1, Ordering::SeqCst);
-                        return statement_return;
-                    } else {
-                        statement_return
+                StatementBlockItem::Statement(statement) => {
+                    match self.evaluate_statement(statement) {
+                        StatementValue::BreakWith(value) => return StatementBlockValue::BreakWith(value),
+                        StatementValue::Break => return StatementBlockValue::Break,
+                        StatementValue::Continue => {}
                     }
-                },
-                StatementBlockItem::Expression(expression) => self.evaluate_expression(expression),
+                }
+                StatementBlockItem::Expression(expression) => { self.evaluate_expression(expression); },
             };
         }
 
-        if let Some(tail_expr) = block.tail_expr() {
+        let tail_value = if let Some(tail_expr) = block.tail_expr() {
             self.evaluate_expression(tail_expr)
         } else {
             Rc::new(Object::Option(None))
-        }
+        };
+
+        StatementBlockValue::Value(tail_value)
     }
 
-    pub fn evaluate_statement(&mut self, statement: &Statement) -> Rc<Object> {
+    pub fn evaluate_statement(&mut self, statement: &Statement) -> StatementValue {
         match statement {
-            Statement::LexicalDeclaration(decl) => self.lexical_declaration(decl),
-            Statement::FunctionDeclaration(decl) => self.function_declaration(decl),
-            Statement::Break(expr) => { 
-                if let Some(expr) = expr.as_ref() { return self.evaluate_expression(expr); }
+            Statement::LexicalDeclaration(decl) => { self.lexical_declaration(decl); StatementValue::Continue },
+            Statement::FunctionDeclaration(decl) => { self.function_declaration(decl); StatementValue::Continue },
+            Statement::Break(None) => StatementValue::Break,
+            Statement::Break(Some(expr)) => { 
+                 StatementValue::BreakWith(self.evaluate_expression(expr))
             }
         }
-
-        Rc::new(Object::Option(None))
     }
 
     pub fn evaluate_if_expr(&mut self, expr: &[Condition]) -> Rc<Object> {
         for cond in expr {
             match cond {
-                Condition::Unconditional(statement_block) => return self.evaluate_statement_block(statement_block),
+                Condition::Unconditional(statement_block) => return self.evaluate_statement_block(statement_block).into(),
                 Condition::Conditional(expr, statement_block) => if let Object::Bool(true) = *self.evaluate_expression(expr) {
-                    return self.evaluate_statement_block(statement_block);
+                    return self.evaluate_statement_block(statement_block).into();
 
                 }
             }
@@ -218,13 +238,11 @@ impl ScopeStack {
     }
 
     pub fn evaluate_loop_expr(&mut self, block: &StatementBlock) -> Rc<Object> {
-        let semaphore = Rc::clone(&self.current().loop_semaphore);
-        let semaphore_value = semaphore.fetch_add(1, Ordering::SeqCst);
         loop {
-            let value = self.evaluate_statement_block(block);
-            
-            if semaphore.load(Ordering::SeqCst) == semaphore_value {
-                return value;
+            match self.evaluate_statement_block(block) {
+                StatementBlockValue::BreakWith(v) => return v,
+                StatementBlockValue::Break => return Rc::new(Object::Option(None)),
+                StatementBlockValue::Value(_) => continue,
             }
         }
     }
@@ -233,7 +251,7 @@ impl ScopeStack {
         match expr {
             Expression::String(s) => Rc::new(Object::String(s.clone())),
             Expression::FunctionCall(function_call) => self.function_call(function_call),
-            Expression::StatementBlock(block) => self.evaluate_statement_block(block),
+            Expression::StatementBlock(block) => self.evaluate_statement_block(block).into(),
             Expression::IfExpr(if_expr) => self.evaluate_if_expr(if_expr),
             Expression::Loop(loop_expr) => self.evaluate_loop_expr(loop_expr),
         }
@@ -284,7 +302,7 @@ impl ScopeStack {
                         self.current().declare_object(identifier, value);
                     }
 
-                    self.evaluate_statement_block(&function.statements)
+                    self.evaluate_statement_block(&function.statements).into()
                 }
                 Object::Builtin(_) => unreachable!(),
                 e => {

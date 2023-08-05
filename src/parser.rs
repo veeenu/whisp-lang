@@ -1,42 +1,42 @@
+use pest::iterators::Pairs;
 use pest_derive::Parser;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
 pub struct WhispParser;
 
+pub fn print_tree(pairs: Pairs<'_, Rule>, indent: usize) {
+    for pair in pairs {
+        let rule = format!("{:?}", pair.as_rule());
+        let text = {
+            let text = pair.as_str();
+            if text.contains('\n') {
+                format!("{}...", text.lines().next().unwrap())
+            } else {
+                text.to_string()
+            }
+        };
+
+        for _ in 0..indent {
+            print!("  ");
+        }
+        print!("\x1b[34;1m{rule}\x1b[0m");
+        let columns = rule.len() + indent * 2;
+        for _ in 0..(32usize.saturating_sub(columns)) {
+            print!(" ");
+        }
+        println!("{text}");
+        print_tree(pair.into_inner(), indent + 1);
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use pest::iterators::Pairs;
     use pest::Parser;
 
     use super::*;
 
     const SAMPLE1: &str = include_str!("../examples/git_aliases.whisp");
-
-    fn print_tree(pairs: Pairs<'_, Rule>, indent: usize) {
-        for pair in pairs {
-            let rule = format!("{:?}", pair.as_rule());
-            let text = {
-                let text = pair.as_str();
-                if text.contains('\n') {
-                    format!("{}...", text.lines().next().unwrap())
-                } else {
-                    text.to_string()
-                }
-            };
-
-            for _ in 0..indent {
-                print!("  ");
-            }
-            print!("\x1b[34;1m{rule}\x1b[0m");
-            let columns = rule.len() + indent * 2;
-            for _ in 0..(32usize.saturating_sub(columns)) {
-                print!(" ");
-            }
-            println!("{text}");
-            print_tree(pair.into_inner(), indent + 1);
-        }
-    }
 
     fn parse(rule: Rule, code: &str) {
         match WhispParser::parse(rule, code.trim()) {

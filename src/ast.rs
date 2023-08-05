@@ -69,6 +69,7 @@ impl<'a> IntoIterator for &'a Program {
 impl Program {
     pub fn parse(code: &str) -> Result<Self> {
         WhispParser::parse(Rule::program, code.trim()).map_err(Error::from).and_then(|mut pairs| {
+            crate::parser::print_tree(pairs.clone(), 0);
             let pair = pairs.next().unwrap();
             Program::try_from(pair)
         })
@@ -207,6 +208,7 @@ impl TryFrom<Pairs<'_>> for StatementBlock {
         let mut tail_expr = None;
 
         for pair in value {
+            println!("{:?} -> {:?}", pair, pair.as_node_tag());
             if let Some("tail_expr") = pair.as_node_tag() {
                 tail_expr = Some(Expression::try_from(pair)?);
                 continue;
