@@ -353,24 +353,6 @@ mod tests {
         )
         .unwrap();
 
-        // let mut program = Interpreter::new(
-        //     r#"
-        //     pub fn main() {
-        //         fn call_ls(path) {
-        //             let output = run ls (path);
-        //             print Output is (output);
-        //             output
-        //         }
-        //
-        //         print Ciao, come stai?;
-        //         let repo_dir = run git rev-parse --show-toplevel;
-        //         print Current directory is {repo_dir};
-        //         let other_output = call_ls {repo_dir};
-        //         print Other output is (other_output);
-        //     }
-        //     "#
-        // ).unwrap();
-
         program.call_function("main");
     }
 
