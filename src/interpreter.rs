@@ -27,12 +27,15 @@ pub enum Object {
     Option(Option<Box<Object>>),
     Function(Function),
     Builtin(Builtin),
+    Ref(Rc<Object>),
+    Null,
 }
 
 impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Object::String(s) => write!(f, "{}", s.deref()),
+            Object::Ref(obj) => obj.fmt(f),
             x => write!(f, "{x:#?}"),
         }
     }
@@ -63,7 +66,7 @@ impl Builtin {
         }
     }
 
-    pub fn run(&self, arguments: Vec<Rc<Object>>) -> Rc<Object> {
+    pub fn run(&self, arguments: Vec<Object>) -> Object {
         match self {
             Builtin::Run => self.call_print(arguments),
             Builtin::Spawn => self.call_print(arguments),
@@ -72,44 +75,47 @@ impl Builtin {
         }
     }
 
-    fn call_print(&self, arguments: Vec<Rc<Object>>) -> Rc<Object> {
-        if arguments.is_empty() {
-            return Rc::new(Object::Option(None));
+    fn call_print(&self, arguments: Vec<Object>) -> Object {
+        let mut arguments = arguments.into_iter();
+
+        if let Some(arg) = arguments.next() {
+            print!("{arg}");
         }
 
-        let mut arguments = arguments.into_iter();
-        print!("{}", arguments.next().unwrap());
         for arg in arguments {
             print!(" {arg}");
         }
+
         println!();
-        Rc::new(Object::Option(None))
+
+        Object::Null
     }
 
-    fn call_check(&self, _arguments: Vec<Rc<Object>>) -> Rc<Object> {
-        Rc::new(Object::Bool(true))
+    fn call_check(&self, _arguments: Vec<Object>) -> Object {
+        Object::Bool(true)
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum StatementValue {
-    BreakWith(Rc<Object>),
+    BreakWith(Object),
     Break,
     Continue,
 }
 
 #[derive(Debug, Clone)]
 pub enum StatementBlockValue {
-    BreakWith(Rc<Object>),
+    BreakWith(Object),
     Break,
-    Value(Rc<Object>),
+    Value(Object),
+    None,
 }
 
-impl From<StatementBlockValue> for Rc<Object> {
+impl From<StatementBlockValue> for Object {
     fn from(value: StatementBlockValue) -> Self {
         match value {
             StatementBlockValue::BreakWith(v) => v,
-            StatementBlockValue::Break => Rc::new(Object::Option(None)),
+            StatementBlockValue::Break | StatementBlockValue::None => Object::Null,
             StatementBlockValue::Value(v) => v,
         }
     }
@@ -131,7 +137,7 @@ impl Interpreter {
         Ok(Self { stack })
     }
 
-    pub fn call_function(&mut self, name: &str) -> Rc<Object> {
+    pub fn call_function(&mut self, name: &str) -> Object {
         self.stack.function_call(&FunctionCall::new(name, Vec::new()))
     }
 }
@@ -146,8 +152,13 @@ impl Scope {
         Default::default()
     }
 
-    pub fn declare_object(&mut self, identifier: &Identifier, object: Rc<Object>) -> Weak<Object> {
-        self.names.insert(identifier.to_string(), object);
+    pub fn declare_object(&mut self, identifier: &Identifier, object: Object) -> Weak<Object> {
+        if let Object::Ref(object) = object {
+            self.names.insert(identifier.to_string(), Rc::clone(&object));
+        } else {
+            self.names.insert(identifier.to_string(), Rc::new(object));
+        }
+
         self.lookup(identifier).unwrap()
     }
 
@@ -207,13 +218,10 @@ impl ScopeStack {
             };
         }
 
-        let tail_value = if let Some(tail_expr) = block.tail_expr() {
-            self.evaluate_expression(tail_expr)
-        } else {
-            Rc::new(Object::Option(None))
-        };
-
-        StatementBlockValue::Value(tail_value)
+        block
+            .tail_expr()
+            .map(|tail_expr| StatementBlockValue::Value(self.evaluate_expression(tail_expr)))
+            .unwrap_or(StatementBlockValue::None)
     }
 
     pub fn evaluate_statement(&mut self, statement: &Statement) -> StatementValue {
@@ -233,36 +241,37 @@ impl ScopeStack {
         }
     }
 
-    pub fn evaluate_if_expr(&mut self, expr: &[Condition]) -> Rc<Object> {
+    pub fn evaluate_if_expr(&mut self, expr: &[Condition]) -> Object {
         for cond in expr {
             match cond {
                 Condition::Unconditional(statement_block) => {
                     return self.evaluate_statement_block(statement_block).into()
                 },
                 Condition::Conditional(expr, statement_block) => {
-                    if let Object::Bool(true) = *self.evaluate_expression(expr) {
+                    // TODO can there be a Ref(Bool)?
+                    if let Object::Bool(true) = self.evaluate_expression(expr) {
                         return self.evaluate_statement_block(statement_block).into();
                     }
                 },
             }
         }
 
-        Rc::new(Object::Option(None))
+        Object::Null
     }
 
-    pub fn evaluate_loop_expr(&mut self, block: &StatementBlock) -> Rc<Object> {
+    pub fn evaluate_loop_expr(&mut self, block: &StatementBlock) -> Object {
         loop {
             match self.evaluate_statement_block(block) {
                 StatementBlockValue::BreakWith(v) => return v,
-                StatementBlockValue::Break => return Rc::new(Object::Option(None)),
-                StatementBlockValue::Value(_) => continue,
+                StatementBlockValue::Break => return Object::Null,
+                StatementBlockValue::Value(_) | StatementBlockValue::None => continue,
             }
         }
     }
 
-    pub fn evaluate_expression(&mut self, expr: &Expression) -> Rc<Object> {
+    pub fn evaluate_expression(&mut self, expr: &Expression) -> Object {
         match expr {
-            Expression::String(s) => Rc::new(Object::String(s.clone())),
+            Expression::String(s) => Object::String(s.clone()),
             Expression::FunctionCall(function_call) => self.function_call(function_call),
             Expression::StatementBlock(block) => self.evaluate_statement_block(block).into(),
             Expression::IfExpr(if_expr) => self.evaluate_if_expr(if_expr),
@@ -291,22 +300,22 @@ impl ScopeStack {
             statements: statement_block.clone(),
         };
 
-        self.current().declare_object(identifier, Rc::new(Object::Function(function)));
+        self.current().declare_object(identifier, Object::Function(function));
     }
 
-    pub fn function_call(&mut self, call: &FunctionCall) -> Rc<Object> {
+    pub fn function_call(&mut self, call: &FunctionCall) -> Object {
         let arguments =
             call.arguments().iter().map(|arg| self.evaluate_expression(arg)).collect::<Vec<_>>();
 
         self.push();
 
-        let return_value = if let Some(builtin) = Builtin::matches(call.function_name()) {
+        let return_value: Object = if let Some(builtin) = Builtin::matches(call.function_name()) {
             builtin.run(arguments)
         } else if let Some(lookup) = self.lookup(call.function_name()) {
             let lookup = Weak::upgrade(&lookup).unwrap();
 
             match lookup.deref() {
-                Object::String(_) => Rc::clone(&lookup),
+                Object::String(_) => Object::Ref(Rc::clone(&lookup)),
                 Object::Function(function) => {
                     for (identifier, value) in function.formal_parameters.iter().zip(arguments) {
                         self.current().declare_object(identifier, value);
@@ -316,13 +325,11 @@ impl ScopeStack {
                 },
                 Object::Builtin(_) => unreachable!(),
                 e => {
-                    eprintln!("Tried to call non function object: {e:?}");
-                    Rc::new(Object::Option(None))
+                    panic!("Tried to call non function object: {e:?}");
                 },
             }
         } else {
-            eprintln!("Function not found: {:?}", call.function_name());
-            Rc::new(Object::Option(None))
+            panic!("Function not found: {:?}", call.function_name());
         };
 
         self.pop();
