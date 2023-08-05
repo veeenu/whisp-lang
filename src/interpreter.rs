@@ -1,5 +1,6 @@
 use std::fmt::Display;
 use std::ops::Deref;
+use std::process::Command;
 use std::rc::{Rc, Weak};
 
 use ahash::AHashMap as HashMap;
@@ -68,11 +69,30 @@ impl Builtin {
 
     pub fn run(&self, arguments: Vec<Object>) -> Object {
         match self {
-            Builtin::Run => self.call_print(arguments),
+            Builtin::Run => self.call_run(arguments),
             Builtin::Spawn => self.call_print(arguments),
             Builtin::Print => self.call_print(arguments),
             Builtin::Check => self.call_check(arguments),
         }
+    }
+
+    fn call_run(&self, arguments: Vec<Object>) -> Object {
+        let mut arguments = arguments.into_iter().map(|arg| arg.to_string());
+
+        let Some(program) = arguments.next() else {
+            panic!("`run` called with no arguments");
+        };
+
+        let mut handle = match Command::new(program).args(arguments).spawn() {
+            Ok(handle) => handle,
+            Err(e) => panic!("running command failed: {e}"),
+        };
+
+        if let Err(e) = handle.wait() {
+            panic!("command failed: {e}");
+        }
+
+        Object::Null
     }
 
     fn call_print(&self, arguments: Vec<Object>) -> Object {

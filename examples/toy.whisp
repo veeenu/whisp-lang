@@ -1,0 +1,7 @@
+fn frf() {
+  run rg "fn "
+}
+
+fn frpf() {
+  run rg "pub fn "
+}

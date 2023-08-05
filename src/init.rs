@@ -1,8 +1,6 @@
-use std::{
-    fmt::Write,
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::fmt::Write;
+use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 use thiserror::Error;
 
@@ -45,8 +43,11 @@ impl WhispInit {
         // Invoke-Expression (& { (zoxide init powershell | Out-String) })
         let mut buf = String::new();
         self.aliases().into_iter().for_each(|(exe, script, name)| {
-            writeln!(&mut buf, r#"function {name}() {{ & '{exe}' '{script}' {name} -- @args }}"#)
-                .unwrap();
+            writeln!(
+                &mut buf,
+                r#"function {name}() {{ & '{exe}' run '{script}' {name} -- @args }}"#
+            )
+            .unwrap();
         });
 
         buf
@@ -55,7 +56,8 @@ impl WhispInit {
     pub fn zsh(&self) -> String {
         let mut buf = String::new();
         self.aliases().into_iter().for_each(|(exe, script, name)| {
-            writeln!(&mut buf, r#"{name}() {{ "{exe}" "{script}" {name} -- "$@" }}"#).unwrap();
+            writeln!(&mut buf, r#"function {name}() {{ "{exe}" run "{script}" {name} -- "$@" }}"#)
+                .unwrap();
         });
 
         buf
