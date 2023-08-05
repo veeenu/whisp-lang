@@ -140,6 +140,10 @@ impl Interpreter {
     pub fn call_function(&mut self, name: &str) -> Object {
         self.stack.function_call(&FunctionCall::new(name, Vec::new()))
     }
+
+    pub fn pub_functions(&self) -> impl Iterator<Item = (&str, Rc<Object>)> {
+        self.stack.current().iter()
+    }
 }
 
 #[derive(Default, Debug)]
@@ -165,6 +169,10 @@ impl Scope {
     pub fn lookup(&self, identifier: &Identifier) -> Option<Weak<Object>> {
         self.names.get(identifier.deref()).map(Rc::downgrade)
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, Rc<Object>)> {
+        self.names.iter().map(|(name, obj)| (name.as_str(), Rc::clone(obj)))
+    }
 }
 
 #[derive(Debug)]
@@ -183,7 +191,7 @@ impl ScopeStack {
 
     pub fn push(&mut self) -> &mut Scope {
         self.0.push(Scope::new());
-        self.current()
+        self.current_mut()
     }
 
     pub fn pop(&mut self) {
@@ -192,7 +200,11 @@ impl ScopeStack {
         }
     }
 
-    pub fn current(&mut self) -> &mut Scope {
+    pub fn current(&self) -> &Scope {
+        self.0.last().unwrap()
+    }
+
+    pub fn current_mut(&mut self) -> &mut Scope {
         self.0.last_mut().unwrap()
     }
 
@@ -284,7 +296,7 @@ impl ScopeStack {
         LexicalDeclaration { identifier, expression }: &LexicalDeclaration,
     ) {
         let object = self.evaluate_expression(expression);
-        self.current().declare_object(identifier, object);
+        self.current_mut().declare_object(identifier, object);
     }
 
     pub fn function_declaration(
@@ -300,7 +312,7 @@ impl ScopeStack {
             statements: statement_block.clone(),
         };
 
-        self.current().declare_object(identifier, Object::Function(function));
+        self.current_mut().declare_object(identifier, Object::Function(function));
     }
 
     pub fn function_call(&mut self, call: &FunctionCall) -> Object {
@@ -318,7 +330,7 @@ impl ScopeStack {
                 Object::String(_) => Object::Ref(Rc::clone(&lookup)),
                 Object::Function(function) => {
                     for (identifier, value) in function.formal_parameters.iter().zip(arguments) {
-                        self.current().declare_object(identifier, value);
+                        self.current_mut().declare_object(identifier, value);
                     }
 
                     self.evaluate_statement_block(&function.statements).into()
