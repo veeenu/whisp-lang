@@ -6,8 +6,8 @@ use ahash::AHashMap as HashMap;
 use thiserror::Error;
 
 use crate::ast::{
-    Error as ParseError, Expression, FunctionCall, FunctionDeclaration, Identifier,
-    LexicalDeclaration, Program, Statement, StatementBlock, StatementBlockItem, WhispString, Condition,
+    Condition, Error as ParseError, Expression, FunctionCall, FunctionDeclaration, Identifier,
+    LexicalDeclaration, Program, Statement, StatementBlock, StatementBlockItem, WhispString,
 };
 
 #[derive(Debug, Error)]
@@ -55,11 +55,11 @@ pub enum Builtin {
 impl Builtin {
     pub fn matches(name: &Identifier) -> Option<Builtin> {
         match name.deref() {
-            "run" =>  Some( Builtin::Run ),
-            "spawn" => Some( Builtin::Spawn ),
-            "print" => Some( Builtin::Print ),
-            "check" => Some( Builtin::Check ),
-            _ => None
+            "run" => Some(Builtin::Run),
+            "spawn" => Some(Builtin::Spawn),
+            "print" => Some(Builtin::Print),
+            "check" => Some(Builtin::Check),
+            _ => None,
         }
     }
 
@@ -194,12 +194,16 @@ impl ScopeStack {
             match block_item {
                 StatementBlockItem::Statement(statement) => {
                     match self.evaluate_statement(statement) {
-                        StatementValue::BreakWith(value) => return StatementBlockValue::BreakWith(value),
+                        StatementValue::BreakWith(value) => {
+                            return StatementBlockValue::BreakWith(value)
+                        },
                         StatementValue::Break => return StatementBlockValue::Break,
-                        StatementValue::Continue => {}
+                        StatementValue::Continue => {},
                     }
-                }
-                StatementBlockItem::Expression(expression) => { self.evaluate_expression(expression); },
+                },
+                StatementBlockItem::Expression(expression) => {
+                    self.evaluate_expression(expression);
+                },
             };
         }
 
@@ -214,23 +218,32 @@ impl ScopeStack {
 
     pub fn evaluate_statement(&mut self, statement: &Statement) -> StatementValue {
         match statement {
-            Statement::LexicalDeclaration(decl) => { self.lexical_declaration(decl); StatementValue::Continue },
-            Statement::FunctionDeclaration(decl) => { self.function_declaration(decl); StatementValue::Continue },
+            Statement::LexicalDeclaration(decl) => {
+                self.lexical_declaration(decl);
+                StatementValue::Continue
+            },
+            Statement::FunctionDeclaration(decl) => {
+                self.function_declaration(decl);
+                StatementValue::Continue
+            },
             Statement::Break(None) => StatementValue::Break,
-            Statement::Break(Some(expr)) => { 
-                 StatementValue::BreakWith(self.evaluate_expression(expr))
-            }
+            Statement::Break(Some(expr)) => {
+                StatementValue::BreakWith(self.evaluate_expression(expr))
+            },
         }
     }
 
     pub fn evaluate_if_expr(&mut self, expr: &[Condition]) -> Rc<Object> {
         for cond in expr {
             match cond {
-                Condition::Unconditional(statement_block) => return self.evaluate_statement_block(statement_block).into(),
-                Condition::Conditional(expr, statement_block) => if let Object::Bool(true) = *self.evaluate_expression(expr) {
-                    return self.evaluate_statement_block(statement_block).into();
-
-                }
+                Condition::Unconditional(statement_block) => {
+                    return self.evaluate_statement_block(statement_block).into()
+                },
+                Condition::Conditional(expr, statement_block) => {
+                    if let Object::Bool(true) = *self.evaluate_expression(expr) {
+                        return self.evaluate_statement_block(statement_block).into();
+                    }
+                },
             }
         }
 
@@ -267,26 +280,23 @@ impl ScopeStack {
 
     pub fn function_declaration(
         &mut self,
-        FunctionDeclaration { 
-            identifier, 
-            formal_parameters, 
-            statement_block 
+        FunctionDeclaration {
+            identifier,
+            formal_parameters,
+            statement_block
         }: &FunctionDeclaration,
     ) {
         let function = Function {
             formal_parameters: formal_parameters.to_vec(),
-            statements: statement_block.clone()
+            statements: statement_block.clone(),
         };
 
         self.current().declare_object(identifier, Rc::new(Object::Function(function)));
     }
 
     pub fn function_call(&mut self, call: &FunctionCall) -> Rc<Object> {
-        let arguments = call
-            .arguments()
-            .iter()
-            .map(|arg| self.evaluate_expression(arg))
-            .collect::<Vec<_>>();
+        let arguments =
+            call.arguments().iter().map(|arg| self.evaluate_expression(arg)).collect::<Vec<_>>();
 
         self.push();
 
@@ -303,16 +313,16 @@ impl ScopeStack {
                     }
 
                     self.evaluate_statement_block(&function.statements).into()
-                }
+                },
                 Object::Builtin(_) => unreachable!(),
                 e => {
                     eprintln!("Tried to call non function object: {e:?}");
                     Rc::new(Object::Option(None))
-                }
+                },
             }
         } else {
             eprintln!("Function not found: {:?}", call.function_name());
-            Rc::new( Object::Option(None) )
+            Rc::new(Object::Option(None))
         };
 
         self.pop();
@@ -332,8 +342,9 @@ mod tests {
             fn main() {
                 print Ciao, come stai?;
             }
-            "#
-        ).unwrap();
+            "#,
+        )
+        .unwrap();
 
         // let mut program = Interpreter::new(
         //     r#"
@@ -358,7 +369,7 @@ mod tests {
 
     #[test]
     fn test_run_program_with_ifs_and_loop() {
-        // This print is interpreted incorrectly: the first (foo) is evaluated but the 
+        // This print is interpreted incorrectly: the first (foo) is evaluated but the
         // one in the statement block {foo} is not.
         let mut program = Interpreter::new(
             r#"
@@ -382,8 +393,9 @@ mod tests {
 
                 print (foo) {foo}
             }
-            "#
-        ).unwrap();
+            "#,
+        )
+        .unwrap();
         program.call_function("main");
     }
 }
