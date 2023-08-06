@@ -3,10 +3,9 @@ name = "whisp"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 ahash = "0.8.3"
-pest = "2.7.0"
-pest_derive = "2.7.0"
+argh = "0.1.10"
+pest = "2.7.1"
+pest_derive = { version = "2.7.1", features = ["grammar-extras"] }
 thiserror = "1.0.40"

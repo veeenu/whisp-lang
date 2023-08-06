@@ -58,8 +58,8 @@ impl TryFrom<Pair<'_>> for Program {
 }
 
 impl<'a> IntoIterator for &'a Program {
-    type Item = &'a FunctionDeclaration;
     type IntoIter = std::slice::Iter<'a, FunctionDeclaration>;
+    type Item = &'a FunctionDeclaration;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
@@ -85,7 +85,8 @@ impl TryFrom<Pair<'_>> for LexicalDeclaration {
     type Error = Error;
 
     fn try_from(value: Pair<'_>) -> Result<Self> {
-        // Extract child nodes, or bail out if supplied node is not a lexical declaration.
+        // Extract child nodes, or bail out if supplied node is not a lexical
+        // declaration.
         let mut children = match value.as_rule() {
             Rule::lexical_declaration => value.into_inner(),
             _ => return Err(Error::unexpected_rule(value)),
@@ -226,8 +227,8 @@ impl TryFrom<Pairs<'_>> for StatementBlock {
 }
 
 impl<'a> IntoIterator for &'a StatementBlock {
-    type Item = &'a StatementBlockItem;
     type IntoIter = std::slice::Iter<'a, StatementBlockItem>;
+    type Item = &'a StatementBlockItem;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter()
@@ -469,8 +470,9 @@ impl TryFrom<Pair<'_>> for WhispString {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use pest::Parser;
+
+    use super::*;
 
     fn try_parse<'a, T>(rule: Rule, code: &'a str) -> Result<T>
     where

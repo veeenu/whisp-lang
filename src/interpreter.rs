@@ -1,14 +1,14 @@
 use std::fmt::Display;
 use std::ops::Deref;
+use std::process::Command;
 use std::rc::{Rc, Weak};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use ahash::AHashMap as HashMap;
 use thiserror::Error;
 
 use crate::ast::{
-    Error as ParseError, Expression, FunctionCall, FunctionDeclaration, Identifier,
-    LexicalDeclaration, Program, Statement, StatementBlock, StatementBlockItem, WhispString, Condition,
+    Condition, Error as ParseError, Expression, FunctionCall, FunctionDeclaration, Identifier,
+    LexicalDeclaration, Program, Statement, StatementBlock, StatementBlockItem, WhispString,
 };
 
 #[derive(Debug, Error)]
@@ -28,12 +28,15 @@ pub enum Object {
     Option(Option<Box<Object>>),
     Function(Function),
     Builtin(Builtin),
+    Ref(Rc<Object>),
+    Null,
 }
 
 impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Object::String(s) => write!(f, "{}", s.deref()),
+            Object::Ref(obj) => obj.fmt(f),
             x => write!(f, "{x:#?}"),
         }
     }
@@ -56,39 +59,85 @@ pub enum Builtin {
 impl Builtin {
     pub fn matches(name: &Identifier) -> Option<Builtin> {
         match name.deref() {
-            "run" =>  Some( Builtin::Run ),
-            "spawn" => Some( Builtin::Spawn ),
-            "print" => Some( Builtin::Print ),
-            "check" => Some( Builtin::Check ),
-            _ => None
+            "run" => Some(Builtin::Run),
+            "spawn" => Some(Builtin::Spawn),
+            "print" => Some(Builtin::Print),
+            "check" => Some(Builtin::Check),
+            _ => None,
         }
     }
 
-    pub fn run(&self, arguments: Vec<Rc<Object>>) -> Rc<Object> {
+    pub fn run(&self, arguments: Vec<Object>) -> Object {
         match self {
-            Builtin::Run => self.call_print(arguments),
+            Builtin::Run => self.call_run(arguments),
             Builtin::Spawn => self.call_print(arguments),
             Builtin::Print => self.call_print(arguments),
             Builtin::Check => self.call_check(arguments),
         }
     }
 
-    fn call_print(&self, arguments: Vec<Rc<Object>>) -> Rc<Object> {
-        if arguments.is_empty() {
-            return Rc::new(Object::Option(None));
+    fn call_run(&self, arguments: Vec<Object>) -> Object {
+        let mut arguments = arguments.into_iter().map(|arg| arg.to_string());
+
+        let Some(program) = arguments.next() else {
+            panic!("`run` called with no arguments");
+        };
+
+        let mut handle = match Command::new(program).args(arguments).spawn() {
+            Ok(handle) => handle,
+            Err(e) => panic!("running command failed: {e}"),
+        };
+
+        if let Err(e) = handle.wait() {
+            panic!("command failed: {e}");
         }
 
+        Object::Null
+    }
+
+    fn call_print(&self, arguments: Vec<Object>) -> Object {
         let mut arguments = arguments.into_iter();
-        print!("{}", arguments.next().unwrap());
+
+        if let Some(arg) = arguments.next() {
+            print!("{arg}");
+        }
+
         for arg in arguments {
             print!(" {arg}");
         }
+
         println!();
-        Rc::new(Object::Option(None))
+
+        Object::Null
     }
 
-    fn call_check(&self, _arguments: Vec<Rc<Object>>) -> Rc<Object> {
-        Rc::new(Object::Bool(true))
+    fn call_check(&self, _arguments: Vec<Object>) -> Object {
+        Object::Bool(true)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum StatementValue {
+    BreakWith(Object),
+    Break,
+    Continue,
+}
+
+#[derive(Debug, Clone)]
+pub enum StatementBlockValue {
+    BreakWith(Object),
+    Break,
+    Value(Object),
+    None,
+}
+
+impl From<StatementBlockValue> for Object {
+    fn from(value: StatementBlockValue) -> Self {
+        match value {
+            StatementBlockValue::BreakWith(v) => v,
+            StatementBlockValue::Break | StatementBlockValue::None => Object::Null,
+            StatementBlockValue::Value(v) => v,
+        }
     }
 }
 
@@ -108,15 +157,18 @@ impl Interpreter {
         Ok(Self { stack })
     }
 
-    pub fn call_function(&mut self, name: &str) -> Rc<Object> {
+    pub fn call_function(&mut self, name: &str) -> Object {
         self.stack.function_call(&FunctionCall::new(name, Vec::new()))
+    }
+
+    pub fn pub_functions(&self) -> impl Iterator<Item = (&str, Rc<Object>)> {
+        self.stack.current().iter()
     }
 }
 
 #[derive(Default, Debug)]
 pub struct Scope {
     names: HashMap<String, Rc<Object>>,
-    loop_semaphore: Rc<AtomicUsize>,
 }
 
 impl Scope {
@@ -124,13 +176,22 @@ impl Scope {
         Default::default()
     }
 
-    pub fn declare_object(&mut self, identifier: &Identifier, object: Rc<Object>) -> Weak<Object> {
-        self.names.insert(identifier.to_string(), object);
+    pub fn declare_object(&mut self, identifier: &Identifier, object: Object) -> Weak<Object> {
+        if let Object::Ref(object) = object {
+            self.names.insert(identifier.to_string(), Rc::clone(&object));
+        } else {
+            self.names.insert(identifier.to_string(), Rc::new(object));
+        }
+
         self.lookup(identifier).unwrap()
     }
 
     pub fn lookup(&self, identifier: &Identifier) -> Option<Weak<Object>> {
         self.names.get(identifier.deref()).map(Rc::downgrade)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&str, Rc<Object>)> {
+        self.names.iter().map(|(name, obj)| (name.as_str(), Rc::clone(obj)))
     }
 }
 
@@ -150,7 +211,7 @@ impl ScopeStack {
 
     pub fn push(&mut self) -> &mut Scope {
         self.0.push(Scope::new());
-        self.current()
+        self.current_mut()
     }
 
     pub fn pop(&mut self) {
@@ -159,7 +220,11 @@ impl ScopeStack {
         }
     }
 
-    pub fn current(&mut self) -> &mut Scope {
+    pub fn current(&self) -> &Scope {
+        self.0.last().unwrap()
+    }
+
+    pub fn current_mut(&mut self) -> &mut Scope {
         self.0.last_mut().unwrap()
     }
 
@@ -167,73 +232,80 @@ impl ScopeStack {
         self.0.iter_mut().rev().find_map(|scope| scope.lookup(identifier))
     }
 
-    pub fn evaluate_statement_block(&mut self, block: &StatementBlock) -> Rc<Object> {
+    pub fn evaluate_statement_block(&mut self, block: &StatementBlock) -> StatementBlockValue {
         for block_item in block {
             match block_item {
-                StatementBlockItem::Statement(statement) => { 
-                    let statement_return = self.evaluate_statement(statement); 
-
-                    if let Statement::Break(_) = statement {
-                        self.current().loop_semaphore.fetch_sub(1, Ordering::SeqCst);
-                        return statement_return;
-                    } else {
-                        statement_return
+                StatementBlockItem::Statement(statement) => {
+                    match self.evaluate_statement(statement) {
+                        StatementValue::BreakWith(value) => {
+                            return StatementBlockValue::BreakWith(value)
+                        },
+                        StatementValue::Break => return StatementBlockValue::Break,
+                        StatementValue::Continue => {},
                     }
                 },
-                StatementBlockItem::Expression(expression) => self.evaluate_expression(expression),
+                StatementBlockItem::Expression(expression) => {
+                    self.evaluate_expression(expression);
+                },
             };
         }
 
-        if let Some(tail_expr) = block.tail_expr() {
-            self.evaluate_expression(tail_expr)
-        } else {
-            Rc::new(Object::Option(None))
-        }
+        block
+            .tail_expr()
+            .map(|tail_expr| StatementBlockValue::Value(self.evaluate_expression(tail_expr)))
+            .unwrap_or(StatementBlockValue::None)
     }
 
-    pub fn evaluate_statement(&mut self, statement: &Statement) -> Rc<Object> {
+    pub fn evaluate_statement(&mut self, statement: &Statement) -> StatementValue {
         match statement {
-            Statement::LexicalDeclaration(decl) => self.lexical_declaration(decl),
-            Statement::FunctionDeclaration(decl) => self.function_declaration(decl),
-            Statement::Break(expr) => { 
-                if let Some(expr) = expr.as_ref() { return self.evaluate_expression(expr); }
-            }
+            Statement::LexicalDeclaration(decl) => {
+                self.lexical_declaration(decl);
+                StatementValue::Continue
+            },
+            Statement::FunctionDeclaration(decl) => {
+                self.function_declaration(decl);
+                StatementValue::Continue
+            },
+            Statement::Break(None) => StatementValue::Break,
+            Statement::Break(Some(expr)) => {
+                StatementValue::BreakWith(self.evaluate_expression(expr))
+            },
         }
-
-        Rc::new(Object::Option(None))
     }
 
-    pub fn evaluate_if_expr(&mut self, expr: &[Condition]) -> Rc<Object> {
+    pub fn evaluate_if_expr(&mut self, expr: &[Condition]) -> Object {
         for cond in expr {
             match cond {
-                Condition::Unconditional(statement_block) => return self.evaluate_statement_block(statement_block),
-                Condition::Conditional(expr, statement_block) => if let Object::Bool(true) = *self.evaluate_expression(expr) {
-                    return self.evaluate_statement_block(statement_block);
-
-                }
+                Condition::Unconditional(statement_block) => {
+                    return self.evaluate_statement_block(statement_block).into()
+                },
+                Condition::Conditional(expr, statement_block) => {
+                    // TODO can there be a Ref(Bool)?
+                    if let Object::Bool(true) = self.evaluate_expression(expr) {
+                        return self.evaluate_statement_block(statement_block).into();
+                    }
+                },
             }
         }
 
-        Rc::new(Object::Option(None))
+        Object::Null
     }
 
-    pub fn evaluate_loop_expr(&mut self, block: &StatementBlock) -> Rc<Object> {
-        let semaphore = Rc::clone(&self.current().loop_semaphore);
-        let semaphore_value = semaphore.fetch_add(1, Ordering::SeqCst);
+    pub fn evaluate_loop_expr(&mut self, block: &StatementBlock) -> Object {
         loop {
-            let value = self.evaluate_statement_block(block);
-            
-            if semaphore.load(Ordering::SeqCst) == semaphore_value {
-                return value;
+            match self.evaluate_statement_block(block) {
+                StatementBlockValue::BreakWith(v) => return v,
+                StatementBlockValue::Break => return Object::Null,
+                StatementBlockValue::Value(_) | StatementBlockValue::None => continue,
             }
         }
     }
 
-    pub fn evaluate_expression(&mut self, expr: &Expression) -> Rc<Object> {
+    pub fn evaluate_expression(&mut self, expr: &Expression) -> Object {
         match expr {
-            Expression::String(s) => Rc::new(Object::String(s.clone())),
+            Expression::String(s) => Object::String(s.clone()),
             Expression::FunctionCall(function_call) => self.function_call(function_call),
-            Expression::StatementBlock(block) => self.evaluate_statement_block(block),
+            Expression::StatementBlock(block) => self.evaluate_statement_block(block).into(),
             Expression::IfExpr(if_expr) => self.evaluate_if_expr(if_expr),
             Expression::Loop(loop_expr) => self.evaluate_loop_expr(loop_expr),
         }
@@ -244,57 +316,52 @@ impl ScopeStack {
         LexicalDeclaration { identifier, expression }: &LexicalDeclaration,
     ) {
         let object = self.evaluate_expression(expression);
-        self.current().declare_object(identifier, object);
+        self.current_mut().declare_object(identifier, object);
     }
 
     pub fn function_declaration(
         &mut self,
-        FunctionDeclaration { 
-            identifier, 
-            formal_parameters, 
-            statement_block 
+        FunctionDeclaration {
+            identifier,
+            formal_parameters,
+            statement_block
         }: &FunctionDeclaration,
     ) {
         let function = Function {
             formal_parameters: formal_parameters.to_vec(),
-            statements: statement_block.clone()
+            statements: statement_block.clone(),
         };
 
-        self.current().declare_object(identifier, Rc::new(Object::Function(function)));
+        self.current_mut().declare_object(identifier, Object::Function(function));
     }
 
-    pub fn function_call(&mut self, call: &FunctionCall) -> Rc<Object> {
-        let arguments = call
-            .arguments()
-            .iter()
-            .map(|arg| self.evaluate_expression(arg))
-            .collect::<Vec<_>>();
+    pub fn function_call(&mut self, call: &FunctionCall) -> Object {
+        let arguments =
+            call.arguments().iter().map(|arg| self.evaluate_expression(arg)).collect::<Vec<_>>();
 
         self.push();
 
-        let return_value = if let Some(builtin) = Builtin::matches(call.function_name()) {
+        let return_value: Object = if let Some(builtin) = Builtin::matches(call.function_name()) {
             builtin.run(arguments)
         } else if let Some(lookup) = self.lookup(call.function_name()) {
             let lookup = Weak::upgrade(&lookup).unwrap();
 
             match lookup.deref() {
-                Object::String(_) => Rc::clone(&lookup),
+                Object::String(_) => Object::Ref(Rc::clone(&lookup)),
                 Object::Function(function) => {
                     for (identifier, value) in function.formal_parameters.iter().zip(arguments) {
-                        self.current().declare_object(identifier, value);
+                        self.current_mut().declare_object(identifier, value);
                     }
 
-                    self.evaluate_statement_block(&function.statements)
-                }
+                    self.evaluate_statement_block(&function.statements).into()
+                },
                 Object::Builtin(_) => unreachable!(),
                 e => {
-                    eprintln!("Tried to call non function object: {e:?}");
-                    Rc::new(Object::Option(None))
-                }
+                    panic!("Tried to call non function object: {e:?}");
+                },
             }
         } else {
-            eprintln!("Function not found: {:?}", call.function_name());
-            Rc::new( Object::Option(None) )
+            panic!("Function not found: {:?}", call.function_name());
         };
 
         self.pop();
@@ -314,33 +381,16 @@ mod tests {
             fn main() {
                 print Ciao, come stai?;
             }
-            "#
-        ).unwrap();
-
-        // let mut program = Interpreter::new(
-        //     r#"
-        //     pub fn main() {
-        //         fn call_ls(path) {
-        //             let output = run ls (path);
-        //             print Output is (output);
-        //             output
-        //         }
-        //
-        //         print Ciao, come stai?;
-        //         let repo_dir = run git rev-parse --show-toplevel;
-        //         print Current directory is {repo_dir};
-        //         let other_output = call_ls {repo_dir};
-        //         print Other output is (other_output);
-        //     }
-        //     "#
-        // ).unwrap();
+            "#,
+        )
+        .unwrap();
 
         program.call_function("main");
     }
 
     #[test]
     fn test_run_program_with_ifs_and_loop() {
-        // This print is interpreted incorrectly: the first (foo) is evaluated but the 
+        // This print is interpreted incorrectly: the first (foo) is evaluated but the
         // one in the statement block {foo} is not.
         let mut program = Interpreter::new(
             r#"
@@ -364,8 +414,9 @@ mod tests {
 
                 print (foo) {foo}
             }
-            "#
-        ).unwrap();
+            "#,
+        )
+        .unwrap();
         program.call_function("main");
     }
 }
