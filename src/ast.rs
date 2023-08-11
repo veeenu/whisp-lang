@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::ops::Deref;
 
-use from_pest::{ConversionError, FromPest};
+use from_pest::{ConversionError, FromPest, Void};
 use pest::{Parser, Span};
 use pest_ast::FromPest;
 use thiserror::Error;
@@ -103,7 +103,7 @@ pub struct UnquotedString(#[pest_ast(outer(with(span_into_string)))] String);
 
 #[derive(Debug, Clone, PartialEq, Eq, FromPest)]
 #[pest_ast(rule(Rule::formal_parameters))]
-pub struct FormalParameters(Vec<Identifier>);
+pub struct FormalParameters(pub Vec<Identifier>);
 
 fn span_into_string(span: Span) -> String {
     span.as_str().to_string()
@@ -149,8 +149,8 @@ pub enum Statement {
 #[derive(Debug, Clone, PartialEq, Eq, FromPest)]
 #[pest_ast(rule(Rule::expression))]
 pub enum Expression {
-    QuotedString(QuotedString),
-    RawQuotedString(RawQuotedString),
+    #[pest_ast(outer(with(WhispString::from_pest)))]
+    String(WhispString),
     FunctionCall(FunctionCall),
     ParenthesisExpression(ParenthesisExpression),
     StatementBlock(Box<StatementBlock>),
@@ -160,7 +160,7 @@ pub enum Expression {
 
 #[derive(Debug, Clone, PartialEq, Eq, FromPest)]
 #[pest_ast(rule(Rule::parenthesis_expression))]
-pub struct ParenthesisExpression(Box<Expression>);
+pub struct ParenthesisExpression(pub Box<Expression>);
 
 #[derive(Debug, Clone, PartialEq, Eq, FromPest)]
 #[pest_ast(rule(Rule::function_call))]
@@ -173,7 +173,7 @@ impl FunctionCall {
     pub fn new<S: Into<String>>(function_name: S, arguments: Vec<Expression>) -> Self {
         Self {
             function_name: Identifier(function_name.into()),
-            arguments: arguments.into_iter().map(|arg| FunctionArg::Expression(arg)).collect(),
+            arguments: arguments.into_iter().map(FunctionArg::Expression).collect(),
         }
     }
 
@@ -193,58 +193,99 @@ pub enum FunctionArg {
     Expression(Expression),
 }
 
+impl From<FunctionArg> for Expression {
+    fn from(value: FunctionArg) -> Self {
+        match value {
+            FunctionArg::UnquotedString(s) => Expression::String(WhispString::from(s)),
+            FunctionArg::Expression(e) => e,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, FromPest)]
 #[pest_ast(rule(Rule::if_expr))]
 pub struct IfExpr {
-    if_cond: Box<IfCond>,
-    else_if_conds: Vec<ElseIfCond>,
-    else_cond: Option<Box<ElseCond>>,
+    pub if_cond: Box<IfCond>,
+    pub else_if_conds: Vec<ElseIfCond>,
+    pub else_cond: Option<Box<ElseCond>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, FromPest)]
 #[pest_ast(rule(Rule::if_cond))]
-pub struct IfCond(ParenthesisExpression, StatementBlock);
+pub struct IfCond(pub ParenthesisExpression, pub StatementBlock);
 
 #[derive(Debug, Clone, PartialEq, Eq, FromPest)]
 #[pest_ast(rule(Rule::else_if_cond))]
-pub struct ElseIfCond(ParenthesisExpression, StatementBlock);
+pub struct ElseIfCond(pub ParenthesisExpression, pub StatementBlock);
 
 #[derive(Debug, Clone, PartialEq, Eq, FromPest)]
 #[pest_ast(rule(Rule::else_cond))]
-pub struct ElseCond(StatementBlock);
+pub struct ElseCond(pub StatementBlock);
 
 #[derive(Debug, Clone, PartialEq, Eq, FromPest)]
 #[pest_ast(rule(Rule::loop_expr))]
-pub struct LoopExpr(Box<StatementBlock>);
+pub struct LoopExpr(pub Box<StatementBlock>);
 
 #[derive(Debug, Clone, PartialEq, Eq, FromPest)]
 #[pest_ast(rule(Rule::break_stmt))]
-pub struct BreakStmt(Option<Expression>);
+pub struct BreakStmt(pub Option<Expression>);
+
+//
+// Support types
+//
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WhispString(String);
+
+impl Deref for WhispString {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_str()
+    }
+}
+
+impl<'pest> FromPest<'pest> for WhispString {
+    type Rule = Rule;
+    type FatalError = Void;
+
+    fn from_pest(
+        pest: &mut pest::iterators::Pairs<'pest, Self::Rule>,
+    ) -> std::result::Result<Self, ConversionError<Self::FatalError>> {
+        if let Ok(quoted_string) = QuotedString::from_pest(pest) {
+            Ok(WhispString::from(quoted_string))
+        } else if let Ok(raw_quoted_string) = RawQuotedString::from_pest(pest) {
+            Ok(WhispString::from(raw_quoted_string))
+        } else {
+            Err(ConversionError::NoMatch)
+        }
+    }
+}
+
+impl From<QuotedString> for WhispString {
+    fn from(value: QuotedString) -> Self {
+        WhispString(value.0)
+    }
+}
+
+impl From<RawQuotedString> for WhispString {
+    fn from(value: RawQuotedString) -> Self {
+        WhispString(value.0)
+    }
+}
+
+impl From<UnquotedString> for WhispString {
+    fn from(value: UnquotedString) -> Self {
+        WhispString(value.0)
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
-
     use pest::Parser;
-    use simplelog::*;
 
     use super::*;
-
-    fn init_log() {
-        static INIT: Mutex<bool> = Mutex::new(false);
-
-        let mut guard = INIT.lock().unwrap();
-        if !*guard {
-            TermLogger::init(
-                LevelFilter::Trace,
-                Config::default(),
-                TerminalMode::Stdout,
-                ColorChoice::Auto,
-            )
-            .unwrap();
-            *guard = true;
-        }
-    }
+    use crate::tests::*;
 
     fn parse_rule<'pest, T>(rule: Rule, code: &'pest str) -> T
     where
@@ -266,7 +307,8 @@ mod tests {
 
     #[test]
     fn test_parse_all_cases() {
-        init_log();
+        init_test_log();
+
         p!(
             LexicalDeclaration,
             Rule::lexical_declaration,
@@ -324,8 +366,8 @@ mod tests {
         p!(Statement, Rule::statement, "break;", Statement::Break(BreakStmt(None)));
         p!(Statement, Rule::statement, "break foo", Statement::Break(BreakStmt(Some(_))));
         p!(Statement, Rule::statement, "break foo;", Statement::Break(BreakStmt(Some(_))));
-        p!(Expression, Rule::expression, "\"foo\"", Expression::QuotedString(_));
-        p!(Expression, Rule::expression, "r#\"foo\"#", Expression::RawQuotedString(_));
+        p!(Expression, Rule::expression, "\"foo\"", Expression::String(s) if s.deref() == "foo");
+        p!(Expression, Rule::expression, "r#\"foo\"#", Expression::String(s) if s.deref() == "foo");
         p!(Expression, Rule::expression, "{}", Expression::StatementBlock(_));
         p!(Expression, Rule::expression, "({})", Expression::ParenthesisExpression(_));
         p!(Expression, Rule::expression, "run foo bar baz;", Expression::FunctionCall(_));
@@ -335,6 +377,7 @@ mod tests {
         p!(FunctionCall, Rule::function_call, "foo", _);
         p!(FunctionCall, Rule::function_call, "foo bar", _);
         p!(FunctionCall, Rule::function_call, "foo bar baz", _);
+        p!(FunctionCall, Rule::function_call, "foo Ciao, come stai?", _);
         p!(FunctionArg, Rule::function_arg, "foo", _);
         p!(FunctionArg, Rule::function_arg, "(foo)", _);
         p!(
@@ -353,7 +396,7 @@ mod tests {
 
     #[test]
     fn test_parse_program() {
-        init_log();
+        init_test_log();
         p!(Program, Rule::program, include_str!("../examples/git_aliases.whisp"), _);
     }
 }

@@ -7,8 +7,9 @@ use ahash::AHashMap as HashMap;
 use thiserror::Error;
 
 use crate::ast::{
-    Error as ParseError, Expression, FunctionCall, FunctionDeclaration, Identifier, IfExpr,
-    LexicalDeclaration, Program, Statement, StatementBlock, StatementBlockItem, WhispString,
+    BreakStmt, ElseIfCond, Error as ParseError, Expression, FunctionArg, FunctionCall,
+    FunctionDeclaration, Identifier, IfExpr, LexicalDeclaration, LoopExpr, Program, Statement,
+    StatementBlock, StatementBlockItem, WhispString,
 };
 
 #[derive(Debug, Error)]
@@ -266,32 +267,30 @@ impl ScopeStack {
                 self.function_declaration(decl);
                 StatementValue::Continue
             },
-            Statement::Break(None) => StatementValue::Break,
-            Statement::Break(Some(expr)) => {
+            Statement::Break(BreakStmt(None)) => StatementValue::Break,
+            Statement::Break(BreakStmt(Some(expr))) => {
                 StatementValue::BreakWith(self.evaluate_expression(expr))
             },
         }
     }
 
-    pub fn evaluate_if_expr(&mut self, expr: &[IfExpr]) -> Object {
-        for cond in expr {
-            match cond {
-                IfExpr::Else(statement_block) => {
-                    return self.evaluate_statement_block(statement_block).into()
-                },
-                IfExpr::Conditional(expr, statement_block) => {
-                    // TODO can there be a Ref(Bool)?
-                    if let Object::Bool(true) = self.evaluate_expression(expr) {
-                        return self.evaluate_statement_block(statement_block).into();
-                    }
-                },
+    pub fn evaluate_if_expr(&mut self, expr: &IfExpr) -> Object {
+        if let Object::Bool(true) = self.evaluate_expression(&expr.if_cond.0 .0) {
+            return self.evaluate_statement_block(&expr.if_cond.1).into();
+        }
+        for ElseIfCond(expr, statement_block) in &expr.else_if_conds {
+            if let Object::Bool(true) = self.evaluate_expression(&expr.0) {
+                return self.evaluate_statement_block(statement_block).into();
             }
+        }
+        if let Some(else_cond) = &expr.else_cond {
+            return self.evaluate_statement_block(&else_cond.0).into();
         }
 
         Object::Null
     }
 
-    pub fn evaluate_loop_expr(&mut self, block: &StatementBlock) -> Object {
+    pub fn evaluate_loop_expr(&mut self, LoopExpr(block): &LoopExpr) -> Object {
         loop {
             match self.evaluate_statement_block(block) {
                 StatementBlockValue::BreakWith(v) => return v,
@@ -303,6 +302,7 @@ impl ScopeStack {
 
     pub fn evaluate_expression(&mut self, expr: &Expression) -> Object {
         match expr {
+            Expression::ParenthesisExpression(expr) => self.evaluate_expression(&expr.0),
             Expression::String(s) => Object::String(s.clone()),
             Expression::FunctionCall(function_call) => self.function_call(function_call),
             Expression::StatementBlock(block) => self.evaluate_statement_block(block).into(),
@@ -328,7 +328,7 @@ impl ScopeStack {
         }: &FunctionDeclaration,
     ) {
         let function = Function {
-            formal_parameters: formal_parameters.to_vec(),
+            formal_parameters: formal_parameters.0.to_vec(),
             statements: statement_block.clone(),
         };
 
@@ -336,8 +336,14 @@ impl ScopeStack {
     }
 
     pub fn function_call(&mut self, call: &FunctionCall) -> Object {
-        let arguments =
-            call.arguments().iter().map(|arg| self.evaluate_expression(arg)).collect::<Vec<_>>();
+        let arguments = call
+            .arguments()
+            .iter()
+            .map(|arg| match arg {
+                FunctionArg::UnquotedString(s) => Object::String(s.clone().into()), // TODO clone
+                FunctionArg::Expression(arg) => self.evaluate_expression(arg),
+            })
+            .collect::<Vec<_>>();
 
         self.push();
 
@@ -373,9 +379,12 @@ impl ScopeStack {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tests::*;
 
     #[test]
     fn test_run_hello_world() {
+        init_test_log();
+
         let mut program = Interpreter::new(
             r#"
             fn main() {
@@ -390,6 +399,8 @@ mod tests {
 
     #[test]
     fn test_run_program_with_ifs_and_loop() {
+        init_test_log();
+
         // This print is interpreted incorrectly: the first (foo) is evaluated but the
         // one in the statement block {foo} is not.
         let mut program = Interpreter::new(
