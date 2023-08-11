@@ -20,10 +20,22 @@ function_declaration = ${
 
 identifier = @{ (!RESERVED_IDENTIFIER ~ (ASCII_ALPHANUMERIC | "_")+) }
 
+quoted_string = { ("\"" ~ quoted_string_content ~ "\"") }
+quoted_string_content = { (!("\"") ~ ANY)* }
+
+raw_quoted_string = { "r#\"" ~ raw_quoted_string_content ~ "\"#"}
+raw_quoted_string_content = { (!("\"#") ~ ANY)* }
+
+unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
+
 formal_parameters = !{ "(" ~ (identifier ~ ",")* ~ (identifier ~ ","?)? ~ ")" }
 
 statement_block = !{
-  "{" ~ (statement | (expression ~ ";"))* ~ (#tail_expr = expression)? ~ "}"
+  "{" ~ statement_block_item* ~ (#tail_expr = expression?) ~ "}"
+}
+
+statement_block_item = !{
+  statement | (expression ~ ";")
 }
 
 statement = !{
@@ -40,40 +52,38 @@ expression = !{
   loop_expr
 }
 
-parenthesis_expression = _{ "(" ~ expression ~ ")" }
+parenthesis_expression = !{ "(" ~ expression ~ ")" }
 
 function_call = ${
   (
-    identifier ~ WHITESPACE+ ~ 
-    ((unquoted_string | expression) ~ WHITESPACE+)* ~ 
-    (unquoted_string | expression)?
+    identifier ~ WHITESPACE+ ~ function_arg? ~ (WHITESPACE+ ~ function_arg)*
   )
   | identifier
 }
 
-quoted_string = { ("\"" ~ quoted_string_content ~ "\"") }
-quoted_string_content = { (!("\"") ~ ANY)* }
-
-raw_quoted_string = { "r#\"" ~ raw_quoted_string_content ~ "\"#"}
-raw_quoted_string_content = { (!("\"#") ~ ANY)* }
-
-unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
-
-if_expr = ${
-  "if" ~ WHITESPACE+ ~
-  parenthesis_expression ~ WHITESPACE* ~
-  statement_block ~
-  (WHITESPACE* ~ else_if_expr)* ~
-  (WHITESPACE* ~ else_expr)?
+function_arg = ${
+  unquoted_string | expression
 }
 
-else_if_expr = ${
+if_expr = ${
+  if_cond ~
+  (WHITESPACE* ~ else_if_cond)* ~
+  (WHITESPACE* ~ else_cond)?
+}
+
+if_cond = ${
+  "if" ~ WHITESPACE+ ~
+  parenthesis_expression ~ WHITESPACE* ~
+  statement_block
+}
+
+else_if_cond = ${
   "else" ~ WHITESPACE+ ~ "if" ~ WHITESPACE* ~
   parenthesis_expression ~ WHITESPACE* ~
   statement_block
 }
 
-else_expr = ${
+else_cond = ${
   "else" ~ WHITESPACE* ~ statement_block
 }
 

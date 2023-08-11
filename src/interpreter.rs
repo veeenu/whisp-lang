@@ -7,7 +7,7 @@ use ahash::AHashMap as HashMap;
 use thiserror::Error;
 
 use crate::ast::{
-    Condition, Error as ParseError, Expression, FunctionCall, FunctionDeclaration, Identifier,
+    Error as ParseError, Expression, FunctionCall, FunctionDeclaration, Identifier, IfExpr,
     LexicalDeclaration, Program, Statement, StatementBlock, StatementBlockItem, WhispString,
 };
 
@@ -273,13 +273,13 @@ impl ScopeStack {
         }
     }
 
-    pub fn evaluate_if_expr(&mut self, expr: &[Condition]) -> Object {
+    pub fn evaluate_if_expr(&mut self, expr: &[IfExpr]) -> Object {
         for cond in expr {
             match cond {
-                Condition::Unconditional(statement_block) => {
+                IfExpr::Else(statement_block) => {
                     return self.evaluate_statement_block(statement_block).into()
                 },
-                Condition::Conditional(expr, statement_block) => {
+                IfExpr::Conditional(expr, statement_block) => {
                     // TODO can there be a Ref(Bool)?
                     if let Object::Bool(true) = self.evaluate_expression(expr) {
                         return self.evaluate_statement_block(statement_block).into();

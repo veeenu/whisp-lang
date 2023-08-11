@@ -6,6 +6,10 @@ edition = "2021"
 [dependencies]
 ahash = "0.8.3"
 argh = "0.1.10"
-pest = "2.7.1"
-pest_derive = { version = "2.7.1", features = ["grammar-extras"] }
+from-pest = "0.3.2"
+log = "0.4.19"
+pest = "2.7.2"
+pest-ast = "0.3.4"
+pest_derive = { version = "2.7.2", features = ["grammar-extras"] }
+simplelog = "0.12.1"
 thiserror = "1.0.40"
