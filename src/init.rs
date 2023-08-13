@@ -22,7 +22,7 @@ pub struct WhispInit {
 
 impl WhispInit {
     pub fn new<P: AsRef<Path>>(script_path: P) -> Result<Self> {
-        let path = script_path.as_ref().to_path_buf();
+        let path = fs::canonicalize(script_path.as_ref().to_path_buf())?;
         let script = fs::read_to_string(&path)?;
         let interpreter = Interpreter::new(&script)?;
 
