@@ -72,6 +72,10 @@ function_call = ${
   identifier ~ WHITESPACE* ~ function_args
 }
 
+// AMBIGUITY: this results into (identifier ~ WHITESPACE* ~ expression).
+// This means that `fooloop {}` _could_ match `foo` (identifier) + `loop {}` (expression) which
+// is undesirable, but it will actually be parsed as `fooloop` (identifier) + `{}` (expression)
+// because identifier is eager and will not stop as long as symbols match it.
 function_args = ${
   (WHITESPACE* ~ expression ~ (WHITESPACE+ ~ expression)*) | empty_args
 }
