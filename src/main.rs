@@ -53,8 +53,8 @@ struct RunSubcommand {
     script_path: PathBuf,
     #[argh(positional)]
     command_name: String,
-    #[argh(positional)]
-    args: Vec<String>,
+    // #[argh(positional)]
+    // args: Vec<String>,
 }
 
 impl RunSubcommand {
