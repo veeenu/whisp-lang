@@ -1,20 +1,24 @@
 fn grom() {
   gpm;
-  run git rebase origin main;
+  run [[git rebase origin main]];
 }
 
 fn gpm() {
-  let cur_branch = { run git branch --show-current };
-  run git checkout main;
-  run git fetch;
-  run git pull;
-  run git checkout (cur_branch);
+  let cur_branch = { run [[git branch --show-current]] };
+  run [[git checkout main]];
+  run [[git fetch]];
+  run [[git pull]];
+  run [[git checkout (cur_branch)]];
 }
 
 fn ct(test_filter, extra_params) {
-  run cargo test { test_filter } -- (extra_params)
+  let cmd = [[cargo test]];
+  push cmd test_filter;
+  extend cmd [[ -- ]];
+  extend cmd extra_params;
+  run cmd;
 }
 
 fn ctnc(test_filter) {
-  ct { test_filter } --nocapture
+  ct test_filter [[--nocapture]]
 }

@@ -2,12 +2,13 @@ use std::fmt::Debug;
 use std::ops::Deref;
 
 use from_pest::{ConversionError, FromPest, Void};
-use pest::{Parser, Span};
+use pest::{iterators::Pairs, Parser, Span};
 use pest_ast::FromPest;
 use thiserror::Error;
 
 use crate::parser::*;
 
+type StdResult<T, E> = std::result::Result<T, E>;
 type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Error, Debug)]
@@ -34,11 +35,11 @@ impl From<pest::error::Error<Rule>> for Error {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::EOI))]
 struct Eoi;
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::program))]
 pub struct Program {
     declarations: Vec<FunctionDeclaration>,
@@ -62,14 +63,14 @@ impl Program {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::lexical_declaration))]
 pub struct LexicalDeclaration {
     pub identifier: Identifier,
     pub expression: Expression,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::function_declaration))]
 pub struct FunctionDeclaration {
     pub identifier: Identifier,
@@ -77,7 +78,7 @@ pub struct FunctionDeclaration {
     pub statement_block: StatementBlock,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::identifier))]
 pub struct Identifier(#[pest_ast(outer(with(span_into_string)))] String);
 
@@ -89,19 +90,68 @@ impl Deref for Identifier {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::quoted_string))]
 pub struct QuotedString(#[pest_ast(inner(with(span_into_string)))] String);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::raw_quoted_string))]
 pub struct RawQuotedString(#[pest_ast(inner(with(span_into_string)))] String);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::unquoted_string))]
 pub struct UnquotedString(#[pest_ast(outer(with(span_into_string)))] String);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
+#[pest_ast(rule(Rule::unquoted_list))]
+pub struct UnquotedList(pub Vec<UnquotedString>);
+
+#[derive(Debug, Clone, PartialEq, FromPest)]
+#[pest_ast(rule(Rule::list))]
+pub struct List(pub Vec<Expression>);
+
+#[derive(Debug, Clone, PartialEq, FromPest)]
+#[pest_ast(rule(Rule::number))]
+pub enum Number {
+    Int(Int),
+    Float(Float),
+}
+
+#[derive(Debug, Clone, PartialEq, FromPest)]
+#[pest_ast(rule(Rule::int))]
+pub struct Int(#[pest_ast(outer(with(Int::parse)))] pub i64);
+
+impl Int {
+    fn parse(span: Span) -> i64 {
+        span.as_str().parse().expect("Failed to parse int")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, FromPest)]
+#[pest_ast(rule(Rule::float))]
+pub struct Float(#[pest_ast(outer(with(Float::parse)))] pub f64);
+
+impl Float {
+    fn parse(span: Span) -> f64 {
+        span.as_str().parse().expect("Failed to parse float")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, FromPest)]
+#[pest_ast(rule(Rule::bool))]
+pub struct Bool(#[pest_ast(outer(with(Bool::parse)))] pub bool);
+
+impl Bool {
+    fn parse(span: Span) -> bool {
+        match span.as_str() {
+            "true" => true,
+            "false" => false,
+            _ => unreachable!("{span:?}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::formal_parameters))]
 pub struct FormalParameters(pub Vec<Identifier>);
 
@@ -109,7 +159,7 @@ fn span_into_string(span: Span) -> String {
     span.as_str().to_string()
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::statement_block))]
 pub struct StatementBlock {
     items: Vec<StatementBlockItem>,
@@ -131,14 +181,14 @@ impl StatementBlock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::statement_block_item))]
 pub enum StatementBlockItem {
     Statement(Statement),
     Expression(Expression),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::statement))]
 pub enum Statement {
     FunctionDeclaration(FunctionDeclaration),
@@ -146,63 +196,119 @@ pub enum Statement {
     Break(BreakStmt),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::expression))]
 pub enum Expression {
     #[pest_ast(outer(with(WhispString::from_pest)))]
     String(WhispString),
+    Number(Number),
+    Bool(Bool),
+    List(List),
+    UnquotedList(UnquotedList),
     FunctionCall(FunctionCall),
     ParenthesisExpression(ParenthesisExpression),
     StatementBlock(Box<StatementBlock>),
     IfExpr(IfExpr),
     Loop(LoopExpr),
+    Identifier(Identifier),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::parenthesis_expression))]
 pub struct ParenthesisExpression(pub Box<Expression>);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
-#[pest_ast(rule(Rule::function_call))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FunctionCall {
     function_name: Identifier,
-    arguments: Vec<FunctionArg>,
+    arguments: FunctionArgs,
+}
+
+impl<'pest> FromPest<'pest> for FunctionCall {
+    type Rule = Rule;
+    type FatalError = Void;
+
+    fn from_pest(
+        pest: &mut Pairs<'pest, Self::Rule>,
+    ) -> StdResult<Self, ConversionError<Self::FatalError>> {
+        let pest = &mut pest
+            .next()
+            .filter(|pair| pair.as_rule() == Rule::function_call)
+            .ok_or(ConversionError::NoMatch)?
+            .into_inner();
+
+        let (object, function_name) = {
+            let first_ident = Identifier::from_pest(pest)?;
+            let second_ident = Option::<Identifier>::from_pest(pest)?;
+            if let Some(second_ident) = second_ident {
+                (Some(first_ident), second_ident)
+            } else {
+                (None, first_ident)
+            }
+        };
+
+        let inner_arguments = FunctionArgs::from_pest(pest)?.0;
+        let arguments = match object {
+            Some(obj) => {
+                let mut v = Vec::with_capacity(inner_arguments.len() + 1);
+                v.push(Expression::Identifier(obj));
+                v.extend(inner_arguments);
+                FunctionArgs(v)
+            },
+            None => FunctionArgs(inner_arguments),
+        };
+
+        Ok(FunctionCall { function_name, arguments })
+    }
 }
 
 impl FunctionCall {
     pub fn new<S: Into<String>>(function_name: S, arguments: Vec<Expression>) -> Self {
-        Self {
-            function_name: Identifier(function_name.into()),
-            arguments: arguments.into_iter().map(FunctionArg::Expression).collect(),
-        }
+        Self { function_name: Identifier(function_name.into()), arguments: FunctionArgs(arguments) }
     }
 
     pub fn function_name(&self) -> &Identifier {
         &self.function_name
     }
 
-    pub fn arguments(&self) -> &[FunctionArg] {
-        &self.arguments
+    pub fn arguments(&self) -> &[Expression] {
+        &self.arguments.0
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
-#[pest_ast(rule(Rule::function_arg))]
-pub enum FunctionArg {
-    UnquotedString(UnquotedString),
-    Expression(Expression),
-}
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionArgs(Vec<Expression>);
 
-impl From<FunctionArg> for Expression {
-    fn from(value: FunctionArg) -> Self {
-        match value {
-            FunctionArg::UnquotedString(s) => Expression::String(WhispString::from(s)),
-            FunctionArg::Expression(e) => e,
+impl<'pest> FromPest<'pest> for FunctionArgs {
+    type Rule = Rule;
+    type FatalError = Void;
+
+    fn from_pest(
+        pest: &mut Pairs<'pest, Self::Rule>,
+    ) -> StdResult<Self, ConversionError<Self::FatalError>> {
+        let pest = &mut pest
+            .next()
+            .filter(|pair| pair.as_rule() == Rule::function_args)
+            .ok_or(ConversionError::NoMatch)?
+            .into_inner();
+
+        let mut args = Vec::new();
+
+        loop {
+            let rule = pest.peek().map(|p| p.as_rule());
+            let expr = match rule {
+                Some(Rule::identifier) => Expression::Identifier(Identifier::from_pest(pest)?),
+                Some(Rule::expression) => Expression::from_pest(pest)?,
+                None => break,
+                x => unreachable!("{x:?}"),
+            };
+            args.push(expr);
         }
+
+        Ok(FunctionArgs(args))
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::if_expr))]
 pub struct IfExpr {
     pub if_cond: Box<IfCond>,
@@ -210,23 +316,23 @@ pub struct IfExpr {
     pub else_cond: Option<Box<ElseCond>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::if_cond))]
 pub struct IfCond(pub ParenthesisExpression, pub StatementBlock);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::else_if_cond))]
 pub struct ElseIfCond(pub ParenthesisExpression, pub StatementBlock);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::else_cond))]
 pub struct ElseCond(pub StatementBlock);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::loop_expr))]
 pub struct LoopExpr(pub Box<StatementBlock>);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::break_stmt))]
 pub struct BreakStmt(pub Option<Expression>);
 
@@ -251,7 +357,7 @@ impl<'pest> FromPest<'pest> for WhispString {
 
     fn from_pest(
         pest: &mut pest::iterators::Pairs<'pest, Self::Rule>,
-    ) -> std::result::Result<Self, ConversionError<Self::FatalError>> {
+    ) -> StdResult<Self, ConversionError<Self::FatalError>> {
         if let Ok(quoted_string) = QuotedString::from_pest(pest) {
             Ok(WhispString::from(quoted_string))
         } else if let Ok(raw_quoted_string) = RawQuotedString::from_pest(pest) {
@@ -282,6 +388,8 @@ impl From<UnquotedString> for WhispString {
 
 #[cfg(test)]
 mod tests {
+    use std::f64::consts::PI;
+
     use pest::Parser;
 
     use super::*;
@@ -323,26 +431,40 @@ mod tests {
         p!(QuotedString, Rule::quoted_string, "\"foo\"", _);
         p!(RawQuotedString, Rule::raw_quoted_string, "r#\"foo\"#", _);
         p!(UnquotedString, Rule::unquoted_string, "r#foo#", _);
+        p!(UnquotedList, Rule::unquoted_list, "[[]]", _);
+        p!(UnquotedList, Rule::unquoted_list, "[[git]]", _);
+        p!(UnquotedList, Rule::unquoted_list, "[[ git ]]", _);
+        p!(UnquotedList, Rule::unquoted_list, "[[ git! ]]", _);
+        p!(UnquotedList, Rule::unquoted_list, "[[git rebase origin main]]", _);
+        p!(List, Rule::list, "[]", List(l) if l.is_empty());
+        p!(List, Rule::list, "[foo]", List(l) if l.len() == 1);
+        p!(List, Rule::list, "[foo, bar]", List(l) if l.len() == 2);
+        p!(List, Rule::list, "[foo, bar, baz,]", List(l) if l.len() == 3);
+        p!(Number, Rule::number, "314", Number::Int(Int(i)) if i == 314);
+        p!(Number, Rule::number, "3.14", Number::Float(Float(x)) if (x - PI).abs() < 0.01);
+        p!(Bool, Rule::bool, "true", Bool(true));
+        p!(Bool, Rule::bool, "false", Bool(false));
         p!(FormalParameters, Rule::formal_parameters, "(foo)", _);
         p!(FormalParameters, Rule::formal_parameters, "(foo, bar, baz)", _);
         p!(FormalParameters, Rule::formal_parameters, "(foo, bar, baz,)", _);
         p!(
             StatementBlock,
             Rule::statement_block,
-            "{ foo; bar baz (quux); }",
+            "{ foo; bar baz quux; }",
             StatementBlock { tail: None, .. }
         );
         p!(
             StatementBlock,
             Rule::statement_block,
-            "{ foo; bar baz (quux); (quux) }",
+            "{ foo; bar baz quux; quux() }",
             StatementBlock { tail: Some(_), .. }
         );
         p!(
             StatementBlock,
             Rule::statement_block,
-            "{ (quux) }",
-            StatementBlock { tail: Some(Expression::ParenthesisExpression(_)), .. }
+            "{ quux }",
+            StatementBlock { tail: Some(Expression::Identifier(quux)), .. }
+            if quux.0 == "quux"
         );
         p!(StatementBlock, Rule::statement_block, "{ }", StatementBlock { tail: None, .. });
         p!(
@@ -358,7 +480,7 @@ mod tests {
             StatementBlockItem,
             Rule::statement_block_item,
             "foo;",
-            StatementBlockItem::Expression(Expression::FunctionCall(_))
+            StatementBlockItem::Expression(Expression::Identifier(_))
         );
         p!(Statement, Rule::statement, "fn foo() {}", Statement::FunctionDeclaration(_));
         p!(Statement, Rule::statement, "let foo = bar;", Statement::LexicalDeclaration(_));
@@ -373,13 +495,28 @@ mod tests {
         p!(Expression, Rule::expression, "run foo bar baz;", Expression::FunctionCall(_));
         p!(Expression, Rule::expression, "if (foo) {}", Expression::IfExpr(_));
         p!(Expression, Rule::expression, "loop {}", Expression::Loop(_));
+        p!(Expression, Rule::expression, "foo", Expression::Identifier(x) if x.0 == "foo");
         p!(ParenthesisExpression, Rule::parenthesis_expression, "(foo)", _);
-        p!(FunctionCall, Rule::function_call, "foo", _);
-        p!(FunctionCall, Rule::function_call, "foo bar", _);
+        p!(FunctionCall, Rule::function_call, "foo()", _);
+        p!(FunctionCall, Rule::function_call, "foo (bar)", _);
         p!(FunctionCall, Rule::function_call, "foo bar baz", _);
-        p!(FunctionCall, Rule::function_call, "foo Ciao, come stai?", _);
-        p!(FunctionArg, Rule::function_arg, "foo", _);
-        p!(FunctionArg, Rule::function_arg, "(foo)", _);
+        p!(
+            FunctionCall,
+            Rule::function_call,
+            "foo.bar()",
+            FunctionCall { function_name, arguments: FunctionArgs(arguments) }
+            if function_name.0 == "bar" && arguments.len() == 1
+        );
+        p!(
+            FunctionCall,
+            Rule::function_call,
+            "foo.bar baz quux",
+            FunctionCall { function_name, arguments: FunctionArgs(arguments) }
+            if function_name.0 == "bar" && arguments.len() == 3
+        );
+        p!(FunctionArgs, Rule::function_args, "()", _);
+        p!(FunctionArgs, Rule::function_args, "foo", _);
+        p!(FunctionArgs, Rule::function_args, "foo bar", _);
         p!(
             IfExpr,
             Rule::if_expr,
@@ -391,7 +528,7 @@ mod tests {
         p!(ElseCond, Rule::else_cond, "else { bar }", _);
         p!(LoopExpr, Rule::loop_expr, "loop { bar }", _);
         p!(BreakStmt, Rule::break_stmt, "break", BreakStmt(None));
-        p!(BreakStmt, Rule::break_stmt, "break foo", BreakStmt(Some(Expression::FunctionCall(FunctionCall { function_name: Identifier(x), arguments }))) if x == "foo" && arguments.is_empty());
+        p!(BreakStmt, Rule::break_stmt, "break foo", BreakStmt(Some(Expression::Identifier(x))) if x.0 == "foo");
     }
 
     #[test]

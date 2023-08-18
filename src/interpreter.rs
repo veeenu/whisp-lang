@@ -7,9 +7,9 @@ use ahash::AHashMap as HashMap;
 use thiserror::Error;
 
 use crate::ast::{
-    BreakStmt, ElseIfCond, Error as ParseError, Expression, FunctionArg, FunctionCall,
-    FunctionDeclaration, Identifier, IfExpr, LexicalDeclaration, LoopExpr, Program, Statement,
-    StatementBlock, StatementBlockItem, WhispString,
+    Bool, BreakStmt, ElseIfCond, Error as ParseError, Expression, FunctionCall,
+    FunctionDeclaration, Identifier, IfExpr, LexicalDeclaration, List, LoopExpr, Number, Program,
+    Statement, StatementBlock, StatementBlockItem, WhispString,
 };
 
 #[derive(Debug, Error)]
@@ -24,6 +24,8 @@ type Result<T> = std::result::Result<T, Error>;
 pub enum Object {
     Bool(bool),
     String(WhispString),
+    Int(i64),
+    Float(f64),
     List(Vec<Object>),
     Dict(HashMap<String, Object>),
     Option(Option<Box<Object>>),
@@ -112,8 +114,8 @@ impl Builtin {
         Object::Null
     }
 
-    fn call_check(&self, _arguments: Vec<Object>) -> Object {
-        Object::Bool(true)
+    fn call_check(&self, arguments: Vec<Object>) -> Object {
+        Object::Bool(arguments.iter().all(|arg| matches!(arg, Object::Bool(true))))
     }
 }
 
@@ -308,6 +310,23 @@ impl ScopeStack {
             Expression::StatementBlock(block) => self.evaluate_statement_block(block).into(),
             Expression::IfExpr(if_expr) => self.evaluate_if_expr(if_expr),
             Expression::Loop(loop_expr) => self.evaluate_loop_expr(loop_expr),
+            Expression::Number(num) => match num {
+                Number::Int(i) => Object::Int(i.0),
+                Number::Float(f) => Object::Float(f.0),
+            },
+            Expression::Identifier(identifier) => {
+                match self.lookup(identifier).and_then(|w| Weak::upgrade(&w)) {
+                    Some(obj) => Object::Ref(obj),
+                    None => panic!("Undefined variable: {identifier:?}"),
+                }
+            },
+            Expression::UnquotedList(l) => {
+                Object::List(l.0.iter().map(|s| Object::String(s.clone().into())).collect())
+            },
+            Expression::Bool(Bool(b)) => Object::Bool(*b),
+            Expression::List(List(l)) => {
+                Object::List(l.iter().map(|expr| self.evaluate_expression(expr)).collect())
+            },
         }
     }
 
@@ -336,14 +355,8 @@ impl ScopeStack {
     }
 
     pub fn function_call(&mut self, call: &FunctionCall) -> Object {
-        let arguments = call
-            .arguments()
-            .iter()
-            .map(|arg| match arg {
-                FunctionArg::UnquotedString(s) => Object::String(s.clone().into()), // TODO clone
-                FunctionArg::Expression(arg) => self.evaluate_expression(arg),
-            })
-            .collect::<Vec<_>>();
+        let arguments =
+            call.arguments().iter().map(|arg| self.evaluate_expression(arg)).collect::<Vec<_>>();
 
         self.push();
 
@@ -388,7 +401,7 @@ mod tests {
         let mut program = Interpreter::new(
             r#"
             fn main() {
-                print Ciao, come stai?;
+                print [[Ciao, come stai?]];
             }
             "#,
         )
@@ -407,11 +420,11 @@ mod tests {
             r#"
             fn main() {
                 let foo = (loop {
-                    print Ciao, come stai?;
+                    print [[Ciao, come stai?]];
                     break "ciao ciao";
                 });
 
-                if (check foo) {
+                if (check (foo)) {
                     print "I should be printed";
                 } else {
                     print "I shouldn't be printed";

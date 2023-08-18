@@ -26,7 +26,26 @@ quoted_string_content = { (!("\"") ~ ANY)* }
 raw_quoted_string = { "r#\"" ~ raw_quoted_string_content ~ "\"#"}
 raw_quoted_string_content = { (!("\"#") ~ ANY)* }
 
-unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
+unquoted_string = { (!("]]" | WHITESPACE) ~ ANY)+ }
+
+unquoted_list = ${ 
+  "[[" ~ WHITESPACE* ~ 
+  unquoted_string? ~ 
+  (WHITESPACE+ ~ unquoted_string)* ~
+  WHITESPACE* ~ "]]"
+}
+
+list = ${
+  "[" ~ WHITESPACE* ~
+  (expression ~ WHITESPACE* ~ "," ~ WHITESPACE*)* ~
+  expression? ~ WHITESPACE* ~ "]"
+}
+
+number = { float | int }
+int = @{ "-"? ~ ASCII_DIGIT+ }
+float = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+
+bool = @{ "true" | "false" }
 
 formal_parameters = !{ "(" ~ (identifier ~ ",")* ~ (identifier ~ ","?)? ~ ")" }
 
@@ -43,27 +62,35 @@ statement = !{
 }
 
 expression = !{
+  unquoted_list |
+  list |
   quoted_string |
   raw_quoted_string |
+  number |
   statement_block | 
-  parenthesis_expression |
   function_call |
+  parenthesis_expression |
   if_expr |
-  loop_expr
+  loop_expr |
+  identifier
 }
 
 parenthesis_expression = !{ "(" ~ expression ~ ")" }
 
 function_call = ${
-  (
-    identifier ~ WHITESPACE+ ~ function_arg? ~ (WHITESPACE+ ~ function_arg)*
-  )
-  | identifier
+  (identifier ~ WHITESPACE* ~ ".")? ~ WHITESPACE* ~ identifier ~ WHITESPACE* ~ function_args
 }
 
-function_arg = ${
-  unquoted_string | expression
+// AMBIGUITY: this results into (identifier ~ WHITESPACE* ~ expression).
+// This means that `fooloop {}` _could_ match `foo` (identifier) + `loop {}` (expression) which
+// is undesirable, but it will actually be parsed as `fooloop` (identifier) + `{}` (expression)
+// because identifier is eager and will not stop as long as symbols match it.
+function_args = ${
+  (WHITESPACE* ~ (identifier | expression) ~ (WHITESPACE+ ~ (identifier | expression))*)
+  | empty_args
 }
+
+empty_args = _ { ("(" ~ WHITESPACE* ~ ")") }
 
 if_expr = ${
   if_cond ~
@@ -96,5 +123,5 @@ break_stmt = ${
 }
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
-RESERVED = _{";" | "{" | "}" | "(" | ")" | "\""}
-RESERVED_IDENTIFIER = @{ "if" | "else" | "loop" | "break" | "fn" | "let" }
+// RESERVED = _{";" | "{" | "}" | "(" | ")" | "\""}
+RESERVED_IDENTIFIER = @{ "if" | "else" | "loop" | "break" | "fn" | "let" | "true" | "false" }
