@@ -7,9 +7,9 @@ use ahash::AHashMap as HashMap;
 use thiserror::Error;
 
 use crate::ast::{
-    BreakStmt, ElseIfCond, Error as ParseError, Expression, FunctionArg, FunctionCall,
-    FunctionDeclaration, Identifier, IfExpr, LexicalDeclaration, LoopExpr, Program, Statement,
-    StatementBlock, StatementBlockItem, WhispString,
+    BreakStmt, ElseIfCond, Error as ParseError, Expression, FunctionCall, FunctionDeclaration,
+    Identifier, IfExpr, LexicalDeclaration, LoopExpr, Number, Program, Statement, StatementBlock,
+    StatementBlockItem, WhispString,
 };
 
 #[derive(Debug, Error)]
@@ -24,6 +24,8 @@ type Result<T> = std::result::Result<T, Error>;
 pub enum Object {
     Bool(bool),
     String(WhispString),
+    Int(i64),
+    Float(f64),
     List(Vec<Object>),
     Dict(HashMap<String, Object>),
     Option(Option<Box<Object>>),
@@ -308,6 +310,10 @@ impl ScopeStack {
             Expression::StatementBlock(block) => self.evaluate_statement_block(block).into(),
             Expression::IfExpr(if_expr) => self.evaluate_if_expr(if_expr),
             Expression::Loop(loop_expr) => self.evaluate_loop_expr(loop_expr),
+            Expression::Number(num) => match num {
+                Number::Int(i) => Object::Int(i.0),
+                Number::Float(f) => Object::Float(f.0),
+            },
         }
     }
 
@@ -339,10 +345,7 @@ impl ScopeStack {
         let arguments = call
             .arguments()
             .iter()
-            .map(|arg| match arg {
-                FunctionArg::UnquotedString(s) => Object::String(s.clone().into()), // TODO clone
-                FunctionArg::Expression(arg) => self.evaluate_expression(arg),
-            })
+            .map(|arg| self.evaluate_expression(arg.into()))
             .collect::<Vec<_>>();
 
         self.push();

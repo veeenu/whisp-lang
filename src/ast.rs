@@ -34,11 +34,11 @@ impl From<pest::error::Error<Rule>> for Error {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::EOI))]
 struct Eoi;
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::program))]
 pub struct Program {
     declarations: Vec<FunctionDeclaration>,
@@ -62,14 +62,14 @@ impl Program {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::lexical_declaration))]
 pub struct LexicalDeclaration {
     pub identifier: Identifier,
     pub expression: Expression,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::function_declaration))]
 pub struct FunctionDeclaration {
     pub identifier: Identifier,
@@ -77,7 +77,7 @@ pub struct FunctionDeclaration {
     pub statement_block: StatementBlock,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::identifier))]
 pub struct Identifier(#[pest_ast(outer(with(span_into_string)))] String);
 
@@ -89,15 +89,15 @@ impl Deref for Identifier {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::quoted_string))]
 pub struct QuotedString(#[pest_ast(inner(with(span_into_string)))] String);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::raw_quoted_string))]
 pub struct RawQuotedString(#[pest_ast(inner(with(span_into_string)))] String);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::unquoted_string))]
 pub struct UnquotedString(#[pest_ast(outer(with(span_into_string)))] String);
 
@@ -110,7 +110,7 @@ pub enum Number {
 
 #[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::float))]
-pub struct Int(#[pest_ast(outer(with(Int::parse)))] i64);
+pub struct Int(#[pest_ast(outer(with(Int::parse)))] pub i64);
 
 impl Int {
     fn parse(span: Span) -> i64 {
@@ -120,7 +120,7 @@ impl Int {
 
 #[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::float))]
-pub struct Float(#[pest_ast(outer(with(Float::parse)))] f64);
+pub struct Float(#[pest_ast(outer(with(Float::parse)))] pub f64);
 
 impl Float {
     fn parse(span: Span) -> f64 {
@@ -128,7 +128,7 @@ impl Float {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::formal_parameters))]
 pub struct FormalParameters(pub Vec<Identifier>);
 
@@ -136,7 +136,7 @@ fn span_into_string(span: Span) -> String {
     span.as_str().to_string()
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::statement_block))]
 pub struct StatementBlock {
     items: Vec<StatementBlockItem>,
@@ -158,14 +158,14 @@ impl StatementBlock {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::statement_block_item))]
 pub enum StatementBlockItem {
     Statement(Statement),
     Expression(Expression),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::statement))]
 pub enum Statement {
     FunctionDeclaration(FunctionDeclaration),
@@ -173,11 +173,12 @@ pub enum Statement {
     Break(BreakStmt),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::expression))]
 pub enum Expression {
     #[pest_ast(outer(with(WhispString::from_pest)))]
     String(WhispString),
+    Number(Number),
     FunctionCall(FunctionCall),
     ParenthesisExpression(ParenthesisExpression),
     StatementBlock(Box<StatementBlock>),
@@ -185,11 +186,11 @@ pub enum Expression {
     Loop(LoopExpr),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::parenthesis_expression))]
 pub struct ParenthesisExpression(pub Box<Expression>);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::function_call))]
 pub struct FunctionCall {
     function_name: Identifier,
@@ -200,7 +201,7 @@ impl FunctionCall {
     pub fn new<S: Into<String>>(function_name: S, arguments: Vec<Expression>) -> Self {
         Self {
             function_name: Identifier(function_name.into()),
-            arguments: arguments.into_iter().map(FunctionArg::Expression).collect(),
+            arguments: arguments.into_iter().map(FunctionArg).collect(),
         }
     }
 
@@ -213,23 +214,23 @@ impl FunctionCall {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::function_arg))]
-pub enum FunctionArg {
-    UnquotedString(UnquotedString),
-    Expression(Expression),
-}
+pub struct FunctionArg(Expression);
 
 impl From<FunctionArg> for Expression {
     fn from(value: FunctionArg) -> Self {
-        match value {
-            FunctionArg::UnquotedString(s) => Expression::String(WhispString::from(s)),
-            FunctionArg::Expression(e) => e,
-        }
+        value.0
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+impl<'a> From<&'a FunctionArg> for &'a Expression {
+    fn from(value: &'a FunctionArg) -> Self {
+        &value.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::if_expr))]
 pub struct IfExpr {
     pub if_cond: Box<IfCond>,
@@ -237,23 +238,23 @@ pub struct IfExpr {
     pub else_cond: Option<Box<ElseCond>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::if_cond))]
 pub struct IfCond(pub ParenthesisExpression, pub StatementBlock);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::else_if_cond))]
 pub struct ElseIfCond(pub ParenthesisExpression, pub StatementBlock);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::else_cond))]
 pub struct ElseCond(pub StatementBlock);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::loop_expr))]
 pub struct LoopExpr(pub Box<StatementBlock>);
 
-#[derive(Debug, Clone, PartialEq, Eq, FromPest)]
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::break_stmt))]
 pub struct BreakStmt(pub Option<Expression>);
 
