@@ -109,12 +109,12 @@ pub enum Number {
 }
 
 #[derive(Debug, Clone, PartialEq, FromPest)]
-#[pest_ast(rule(Rule::float))]
+#[pest_ast(rule(Rule::int))]
 pub struct Int(#[pest_ast(outer(with(Int::parse)))] pub i64);
 
 impl Int {
     fn parse(span: Span) -> i64 {
-        span.as_str().parse().expect("Failed to parse float")
+        span.as_str().parse().expect("Failed to parse int")
     }
 }
 
@@ -184,6 +184,7 @@ pub enum Expression {
     StatementBlock(Box<StatementBlock>),
     IfExpr(IfExpr),
     Loop(LoopExpr),
+    Identifier(Identifier),
 }
 
 #[derive(Debug, Clone, PartialEq, FromPest)]
@@ -194,41 +195,26 @@ pub struct ParenthesisExpression(pub Box<Expression>);
 #[pest_ast(rule(Rule::function_call))]
 pub struct FunctionCall {
     function_name: Identifier,
-    arguments: Vec<FunctionArg>,
+    arguments: FunctionArgs,
 }
 
 impl FunctionCall {
     pub fn new<S: Into<String>>(function_name: S, arguments: Vec<Expression>) -> Self {
-        Self {
-            function_name: Identifier(function_name.into()),
-            arguments: arguments.into_iter().map(FunctionArg).collect(),
-        }
+        Self { function_name: Identifier(function_name.into()), arguments: FunctionArgs(arguments) }
     }
 
     pub fn function_name(&self) -> &Identifier {
         &self.function_name
     }
 
-    pub fn arguments(&self) -> &[FunctionArg] {
-        &self.arguments
+    pub fn arguments(&self) -> &[Expression] {
+        &self.arguments.0
     }
 }
 
 #[derive(Debug, Clone, PartialEq, FromPest)]
-#[pest_ast(rule(Rule::function_arg))]
-pub struct FunctionArg(Expression);
-
-impl From<FunctionArg> for Expression {
-    fn from(value: FunctionArg) -> Self {
-        value.0
-    }
-}
-
-impl<'a> From<&'a FunctionArg> for &'a Expression {
-    fn from(value: &'a FunctionArg) -> Self {
-        &value.0
-    }
-}
+#[pest_ast(rule(Rule::function_args))]
+pub struct FunctionArgs(Vec<Expression>);
 
 #[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::if_expr))]
@@ -310,6 +296,8 @@ impl From<UnquotedString> for WhispString {
 
 #[cfg(test)]
 mod tests {
+    use std::f64::consts::PI;
+
     use pest::Parser;
 
     use super::*;
@@ -351,26 +339,29 @@ mod tests {
         p!(QuotedString, Rule::quoted_string, "\"foo\"", _);
         p!(RawQuotedString, Rule::raw_quoted_string, "r#\"foo\"#", _);
         p!(UnquotedString, Rule::unquoted_string, "r#foo#", _);
+        p!(Number, Rule::number, "314", Number::Int(Int(i)) if i == 314);
+        p!(Number, Rule::number, "3.14", Number::Float(Float(x)) if (x - PI).abs() < 0.01);
         p!(FormalParameters, Rule::formal_parameters, "(foo)", _);
         p!(FormalParameters, Rule::formal_parameters, "(foo, bar, baz)", _);
         p!(FormalParameters, Rule::formal_parameters, "(foo, bar, baz,)", _);
         p!(
             StatementBlock,
             Rule::statement_block,
-            "{ foo; bar baz (quux); }",
+            "{ foo; bar (baz, quux); }",
             StatementBlock { tail: None, .. }
         );
         p!(
             StatementBlock,
             Rule::statement_block,
-            "{ foo; bar baz (quux); (quux) }",
+            "{ foo; bar (baz, quux); quux }",
             StatementBlock { tail: Some(_), .. }
         );
         p!(
             StatementBlock,
             Rule::statement_block,
-            "{ (quux) }",
-            StatementBlock { tail: Some(Expression::ParenthesisExpression(_)), .. }
+            "{ quux }",
+            StatementBlock { tail: Some(Expression::Identifier(quux)), .. }
+            if quux.0 == "quux"
         );
         p!(StatementBlock, Rule::statement_block, "{ }", StatementBlock { tail: None, .. });
         p!(
@@ -386,7 +377,7 @@ mod tests {
             StatementBlockItem,
             Rule::statement_block_item,
             "foo;",
-            StatementBlockItem::Expression(Expression::FunctionCall(_))
+            StatementBlockItem::Expression(Expression::Identifier(_))
         );
         p!(Statement, Rule::statement, "fn foo() {}", Statement::FunctionDeclaration(_));
         p!(Statement, Rule::statement, "let foo = bar;", Statement::LexicalDeclaration(_));
@@ -398,16 +389,19 @@ mod tests {
         p!(Expression, Rule::expression, "r#\"foo\"#", Expression::String(s) if s.deref() == "foo");
         p!(Expression, Rule::expression, "{}", Expression::StatementBlock(_));
         p!(Expression, Rule::expression, "({})", Expression::ParenthesisExpression(_));
-        p!(Expression, Rule::expression, "run foo bar baz;", Expression::FunctionCall(_));
+        p!(Expression, Rule::expression, "run (foo, bar, baz);", Expression::FunctionCall(_));
         p!(Expression, Rule::expression, "if (foo) {}", Expression::IfExpr(_));
         p!(Expression, Rule::expression, "loop {}", Expression::Loop(_));
+        p!(Expression, Rule::expression, "foo", Expression::Identifier(x) if x.0 == "foo");
         p!(ParenthesisExpression, Rule::parenthesis_expression, "(foo)", _);
-        p!(FunctionCall, Rule::function_call, "foo", _);
-        p!(FunctionCall, Rule::function_call, "foo bar", _);
-        p!(FunctionCall, Rule::function_call, "foo bar baz", _);
-        p!(FunctionCall, Rule::function_call, "foo Ciao, come stai?", _);
-        p!(FunctionArg, Rule::function_arg, "foo", _);
-        p!(FunctionArg, Rule::function_arg, "(foo)", _);
+        p!(FunctionCall, Rule::function_call, "foo()", _);
+        p!(FunctionCall, Rule::function_call, "foo(bar)", _);
+        p!(FunctionCall, Rule::function_call, "foo(bar, baz)", _);
+        p!(FunctionArgs, Rule::function_args, "()", _);
+        p!(FunctionArgs, Rule::function_args, "(foo)", _);
+        p!(FunctionArgs, Rule::function_args, "(foo, bar)", _);
+        p!(FunctionArgs, Rule::function_args, "(foo, bar,)", _);
+        p!(FunctionArgs, Rule::function_args, "( foo,bar, )", _);
         p!(
             IfExpr,
             Rule::if_expr,
@@ -419,7 +413,7 @@ mod tests {
         p!(ElseCond, Rule::else_cond, "else { bar }", _);
         p!(LoopExpr, Rule::loop_expr, "loop { bar }", _);
         p!(BreakStmt, Rule::break_stmt, "break", BreakStmt(None));
-        p!(BreakStmt, Rule::break_stmt, "break foo", BreakStmt(Some(Expression::FunctionCall(FunctionCall { function_name: Identifier(x), arguments }))) if x == "foo" && arguments.is_empty());
+        p!(BreakStmt, Rule::break_stmt, "break foo", BreakStmt(Some(Expression::Identifier(x))) if x.0 == "foo");
     }
 
     #[test]

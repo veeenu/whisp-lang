@@ -314,6 +314,12 @@ impl ScopeStack {
                 Number::Int(i) => Object::Int(i.0),
                 Number::Float(f) => Object::Float(f.0),
             },
+            Expression::Identifier(identifier) => {
+                match self.lookup(identifier).and_then(|w| Weak::upgrade(&w)) {
+                    Some(obj) => Object::Ref(obj),
+                    None => panic!("Undefined variable: {identifier:?}"),
+                }
+            },
         }
     }
 
@@ -342,11 +348,8 @@ impl ScopeStack {
     }
 
     pub fn function_call(&mut self, call: &FunctionCall) -> Object {
-        let arguments = call
-            .arguments()
-            .iter()
-            .map(|arg| self.evaluate_expression(arg.into()))
-            .collect::<Vec<_>>();
+        let arguments =
+            call.arguments().iter().map(|arg| self.evaluate_expression(arg)).collect::<Vec<_>>();
 
         self.push();
 

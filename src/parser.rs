@@ -174,8 +174,8 @@ mod tests {
         parse(
             Rule::if_expr,
             r#"
-            if (run program1) {
-                run program2
+            if (run (program1)) {
+                run (program2)
             }
             "#,
         );
@@ -183,21 +183,21 @@ mod tests {
             Rule::if_expr,
             r#"
             if (run program1) {
-                run program2
+                run (program2)
             } else {
-                run program3
+                run (program3)
             }
             "#,
         );
         parse(
             Rule::if_expr,
             r#"
-            if (run program1) {
-                run program2
-            } else if (run program3) {
-                run program4
+            if (run (program1)) {
+                run (program2)
+            } else if (run (program3)) {
+                run (program4)
             } else {
-                run program5
+                run (program5)
             }
             "#,
         );
@@ -205,12 +205,12 @@ mod tests {
             Rule::statement_block,
             r#"
             {
-                if (run program1) {
-                    run program2
+                if (run (program1)) {
+                    run (program2)
                 } else {
-                    run program4
-                } else if (run program2) {
-                    run program5
+                    run (program4)
+                } else if (run (program2)) {
+                    run (program5)
                 }
             }
             "#,
@@ -223,7 +223,7 @@ mod tests {
             Rule::loop_expr,
             r#"
             loop {
-                run program3;
+                run (program3);
                 break;
                 break foo;
                 break "foo";

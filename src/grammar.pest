@@ -28,7 +28,7 @@ raw_quoted_string_content = { (!("\"#") ~ ANY)* }
 
 unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
 
-number = @{ int | float }
+number = { float | int }
 int = @{ "-"? ~ ASCII_DIGIT+ }
 float = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
 
@@ -54,20 +54,23 @@ expression = !{
   parenthesis_expression |
   function_call |
   if_expr |
-  loop_expr
+  loop_expr |
+  identifier
 }
 
 parenthesis_expression = !{ "(" ~ expression ~ ")" }
 
 function_call = ${
-  (
-    identifier ~ WHITESPACE+ ~ function_arg? ~ (WHITESPACE+ ~ function_arg)*
-  )
-  | identifier
+  identifier ~ WHITESPACE* ~ function_args
 }
 
-function_arg = ${
-  expression
+function_args = ${
+  (
+  "(" ~ WHITESPACE* ~ 
+    (expression ~ WHITESPACE* ~ "," ~ WHITESPACE*)* ~ 
+    (expression ~ WHITESPACE*)* ~ 
+  ")"
+  ) | ("(" ~ WHITESPACE* ~ ")")
 }
 
 if_expr = ${
