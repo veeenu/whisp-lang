@@ -9,7 +9,7 @@ argh = "0.1.10"
 from-pest = "0.3.2"
 log = "0.4.19"
 pest = "2.7.2"
-pest-ast = "0.3.4"
+pest-ast = { git = "https://github.com/pest-parser/ast" }# "0.3.4"
 pest_derive = { version = "2.7.2", features = ["grammar-extras"] }
 simplelog = "0.12.1"
 thiserror = "1.0.40"
