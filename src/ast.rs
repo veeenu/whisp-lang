@@ -102,6 +102,10 @@ pub struct RawQuotedString(#[pest_ast(inner(with(span_into_string)))] String);
 pub struct UnquotedString(#[pest_ast(outer(with(span_into_string)))] String);
 
 #[derive(Debug, Clone, PartialEq, FromPest)]
+#[pest_ast(rule(Rule::unquoted_list))]
+pub struct UnquotedList(pub Vec<UnquotedString>);
+
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::number))]
 pub enum Number {
     Int(Int),
@@ -179,6 +183,7 @@ pub enum Expression {
     #[pest_ast(outer(with(WhispString::from_pest)))]
     String(WhispString),
     Number(Number),
+    UnquotedList(UnquotedList),
     FunctionCall(FunctionCall),
     ParenthesisExpression(ParenthesisExpression),
     StatementBlock(Box<StatementBlock>),
@@ -339,6 +344,11 @@ mod tests {
         p!(QuotedString, Rule::quoted_string, "\"foo\"", _);
         p!(RawQuotedString, Rule::raw_quoted_string, "r#\"foo\"#", _);
         p!(UnquotedString, Rule::unquoted_string, "r#foo#", _);
+        p!(UnquotedList, Rule::unquoted_list, "[[]]", _);
+        p!(UnquotedList, Rule::unquoted_list, "[[git]]", _);
+        p!(UnquotedList, Rule::unquoted_list, "[[ git ]]", _);
+        p!(UnquotedList, Rule::unquoted_list, "[[ git! ]]", _);
+        p!(UnquotedList, Rule::unquoted_list, "[[git rebase origin main]]", _);
         p!(Number, Rule::number, "314", Number::Int(Int(i)) if i == 314);
         p!(Number, Rule::number, "3.14", Number::Float(Float(x)) if (x - PI).abs() < 0.01);
         p!(FormalParameters, Rule::formal_parameters, "(foo)", _);

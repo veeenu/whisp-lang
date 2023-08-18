@@ -320,6 +320,9 @@ impl ScopeStack {
                     None => panic!("Undefined variable: {identifier:?}"),
                 }
             },
+            Expression::UnquotedList(l) => {
+                Object::List(l.0.iter().map(|s| Object::String(s.clone().into())).collect())
+            },
         }
     }
 
@@ -394,7 +397,7 @@ mod tests {
         let mut program = Interpreter::new(
             r#"
             fn main() {
-                print Ciao, come stai?;
+                print([[Ciao, come stai?]]);
             }
             "#,
         )
@@ -413,23 +416,23 @@ mod tests {
             r#"
             fn main() {
                 let foo = (loop {
-                    print Ciao, come stai?;
+                    print([[Ciao, come stai?]]);
                     break "ciao ciao";
                 });
 
-                if (check foo) {
-                    print "I should be printed";
+                if (check (foo)) {
+                    print("I should be printed");
                 } else {
-                    print "I shouldn't be printed";
+                    print("I shouldn't be printed");
                 };
 
                 if (foo) {
-                    print "I shouldn't be printed";
+                    print("I shouldn't be printed");
                 } else {
-                    print "I should be printed";
+                    print("I should be printed");
                 };
 
-                print (foo) {foo}
+                print ((foo), {foo})
             }
             "#,
         )

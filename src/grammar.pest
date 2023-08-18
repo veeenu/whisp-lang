@@ -26,7 +26,14 @@ quoted_string_content = { (!("\"") ~ ANY)* }
 raw_quoted_string = { "r#\"" ~ raw_quoted_string_content ~ "\"#"}
 raw_quoted_string_content = { (!("\"#") ~ ANY)* }
 
-unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
+unquoted_string = { (!("]]" | WHITESPACE) ~ ANY)+ }
+
+unquoted_list = ${ 
+  "[[" ~ WHITESPACE* ~ 
+  unquoted_string? ~ 
+  (WHITESPACE+ ~ unquoted_string)* ~
+  WHITESPACE* ~ "]]"
+}
 
 number = { float | int }
 int = @{ "-"? ~ ASCII_DIGIT+ }
@@ -49,6 +56,7 @@ statement = !{
 expression = !{
   quoted_string |
   raw_quoted_string |
+  unquoted_list |
   number |
   statement_block | 
   parenthesis_expression |
@@ -68,7 +76,7 @@ function_args = ${
   (
   "(" ~ WHITESPACE* ~ 
     (expression ~ WHITESPACE* ~ "," ~ WHITESPACE*)* ~ 
-    (expression ~ WHITESPACE*)* ~ 
+    (expression ~ WHITESPACE*)? ~ 
   ")"
   ) | ("(" ~ WHITESPACE* ~ ")")
 }

@@ -73,9 +73,9 @@ mod tests {
         parse(Rule::expression, r#"cur_branch"#);
         parse(Rule::expression, r#" cur_branch "#);
         parse(Rule::expression, r#"(cur_branch)"#);
-        parse(Rule::expression, r#"run git checkout main"#);
-        parse(Rule::expression, r#" run git checkout main "#);
-        parse(Rule::expression, r#"(run git checkout main)"#);
+        parse(Rule::expression, r#"run([[git checkout main]])"#);
+        parse(Rule::expression, r#" run([[git checkout main]])"#);
+        parse(Rule::expression, r#"(run ([[git checkout main]]))"#);
     }
 
     #[test]
@@ -87,7 +87,7 @@ mod tests {
         parse(Rule::lexical_declaration, "let foo = bar;");
         parse(Rule::lexical_declaration, "let foo=bar;");
         parse(Rule::lexical_declaration, r#"let foo = "string";"#);
-        parse(Rule::lexical_declaration, r#"let foo = (run git diff main..);"#);
+        parse(Rule::lexical_declaration, r#"let foo = (run ([[git diff main..]]));"#);
         parse(Rule::lexical_declaration, r#"let foo = { bar; foo };"#);
         parse(Rule::lexical_declaration, r#"let foo = { bar; foo ;};"#);
         parse(Rule::lexical_declaration, r#"let foo = { bar; foo; };"#);
@@ -95,21 +95,21 @@ mod tests {
 
     #[test]
     fn test_function_call() {
-        parse(Rule::function_call, r#"print Ciao, come stai?"#);
-        parse(Rule::function_call, r#"run git checkout { cur_branch }"#);
-        parse(Rule::function_call, r#"run git "checkout" { cur_branch }"#);
-        parse(Rule::function_call, "run git r#\"checkout\"# { cur_branch }");
+        parse(Rule::function_call, r#"print ([[Ciao, come stai?]])"#);
+        parse(Rule::function_call, r#"run ("git", "checkout", cur_branch)"#);
+        parse(Rule::function_call, r#"run ("git", "checkout", { cur_branch })"#);
+        parse(Rule::function_call, "run (r#\"git\"#, r#\"checkout\"#, { cur_branch })");
     }
 
     #[test]
     fn test_statement_block() {
         parse(Rule::statement_block, r#"{cur_branch;}"#);
-        parse(Rule::statement_block, r#"{run git checkout main;}"#);
+        parse(Rule::statement_block, r#"{run ([[git checkout main]]);}"#);
         parse(Rule::statement_block, r#"{ cur_branch; }"#);
-        parse(Rule::statement_block, r#"{ run git checkout main; }"#);
+        parse(Rule::statement_block, r#"{ run ([[git checkout main]]); }"#);
         parse(Rule::statement_block, r#"{cur_branch}"#);
-        parse(Rule::statement_block, r#"{run git checkout main}"#);
-        parse(Rule::statement_block, r#"{ run git checkout main }"#);
+        parse(Rule::statement_block, r#"{run ([[git checkout main]])}"#);
+        parse(Rule::statement_block, r#"{ run ([[git checkout main]]) }"#);
         parse(Rule::statement_block, r#"{ cur_branch }"#);
         parse(Rule::statement_block, r#"{ fn foo() {} }"#);
         parse(Rule::statement_block, r#"{ fn foo() {} fn bar() {} foo; bar }"#);
@@ -149,7 +149,7 @@ mod tests {
                   foo;
               }
 
-              run git rebase origin main;
+              run ([[git rebase origin main]]);
             }
             "#,
         );
@@ -163,7 +163,7 @@ mod tests {
                   foo;
               }
 
-              run git rebase origin main;
+              run ([[git rebase origin main]]);
             }
             "#,
         );
@@ -182,7 +182,7 @@ mod tests {
         parse(
             Rule::if_expr,
             r#"
-            if (run program1) {
+            if (run (program1)) {
                 run (program2)
             } else {
                 run (program3)
