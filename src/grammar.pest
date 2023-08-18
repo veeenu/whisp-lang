@@ -35,9 +35,17 @@ unquoted_list = ${
   WHITESPACE* ~ "]]"
 }
 
+list = ${
+  "[" ~ WHITESPACE* ~
+  (expression ~ WHITESPACE* ~ "," ~ WHITESPACE*)* ~
+  expression? ~ WHITESPACE* ~ "]"
+}
+
 number = { float | int }
 int = @{ "-"? ~ ASCII_DIGIT+ }
 float = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+
+bool = @{ "true" | "false" }
 
 formal_parameters = !{ "(" ~ (identifier ~ ",")* ~ (identifier ~ ","?)? ~ ")" }
 
@@ -54,9 +62,10 @@ statement = !{
 }
 
 expression = !{
+  unquoted_list |
+  list |
   quoted_string |
   raw_quoted_string |
-  unquoted_list |
   number |
   statement_block | 
   function_call |
@@ -114,5 +123,5 @@ break_stmt = ${
 }
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
-RESERVED = _{";" | "{" | "}" | "(" | ")" | "\""}
-RESERVED_IDENTIFIER = @{ "if" | "else" | "loop" | "break" | "fn" | "let" }
+// RESERVED = _{";" | "{" | "}" | "(" | ")" | "\""}
+RESERVED_IDENTIFIER = @{ "if" | "else" | "loop" | "break" | "fn" | "let" | "true" | "false" }

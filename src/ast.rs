@@ -107,6 +107,10 @@ pub struct UnquotedString(#[pest_ast(outer(with(span_into_string)))] String);
 pub struct UnquotedList(pub Vec<UnquotedString>);
 
 #[derive(Debug, Clone, PartialEq, FromPest)]
+#[pest_ast(rule(Rule::list))]
+pub struct List(pub Vec<Expression>);
+
+#[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::number))]
 pub enum Number {
     Int(Int),
@@ -130,6 +134,20 @@ pub struct Float(#[pest_ast(outer(with(Float::parse)))] pub f64);
 impl Float {
     fn parse(span: Span) -> f64 {
         span.as_str().parse().expect("Failed to parse float")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, FromPest)]
+#[pest_ast(rule(Rule::bool))]
+pub struct Bool(#[pest_ast(outer(with(Bool::parse)))] pub bool);
+
+impl Bool {
+    fn parse(span: Span) -> bool {
+        match span.as_str() {
+            "true" => true,
+            "false" => false,
+            _ => unreachable!("{span:?}"),
+        }
     }
 }
 
@@ -184,6 +202,8 @@ pub enum Expression {
     #[pest_ast(outer(with(WhispString::from_pest)))]
     String(WhispString),
     Number(Number),
+    Bool(Bool),
+    List(List),
     UnquotedList(UnquotedList),
     FunctionCall(FunctionCall),
     ParenthesisExpression(ParenthesisExpression),
@@ -416,8 +436,14 @@ mod tests {
         p!(UnquotedList, Rule::unquoted_list, "[[ git ]]", _);
         p!(UnquotedList, Rule::unquoted_list, "[[ git! ]]", _);
         p!(UnquotedList, Rule::unquoted_list, "[[git rebase origin main]]", _);
+        p!(List, Rule::list, "[]", List(l) if l.is_empty());
+        p!(List, Rule::list, "[foo]", List(l) if l.len() == 1);
+        p!(List, Rule::list, "[foo, bar]", List(l) if l.len() == 2);
+        p!(List, Rule::list, "[foo, bar, baz,]", List(l) if l.len() == 3);
         p!(Number, Rule::number, "314", Number::Int(Int(i)) if i == 314);
         p!(Number, Rule::number, "3.14", Number::Float(Float(x)) if (x - PI).abs() < 0.01);
+        p!(Bool, Rule::bool, "true", Bool(true));
+        p!(Bool, Rule::bool, "false", Bool(false));
         p!(FormalParameters, Rule::formal_parameters, "(foo)", _);
         p!(FormalParameters, Rule::formal_parameters, "(foo, bar, baz)", _);
         p!(FormalParameters, Rule::formal_parameters, "(foo, bar, baz,)", _);

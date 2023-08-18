@@ -7,9 +7,9 @@ use ahash::AHashMap as HashMap;
 use thiserror::Error;
 
 use crate::ast::{
-    BreakStmt, ElseIfCond, Error as ParseError, Expression, FunctionCall, FunctionDeclaration,
-    Identifier, IfExpr, LexicalDeclaration, LoopExpr, Number, Program, Statement, StatementBlock,
-    StatementBlockItem, WhispString,
+    Bool, BreakStmt, ElseIfCond, Error as ParseError, Expression, FunctionCall,
+    FunctionDeclaration, Identifier, IfExpr, LexicalDeclaration, List, LoopExpr, Number, Program,
+    Statement, StatementBlock, StatementBlockItem, WhispString,
 };
 
 #[derive(Debug, Error)]
@@ -322,6 +322,10 @@ impl ScopeStack {
             },
             Expression::UnquotedList(l) => {
                 Object::List(l.0.iter().map(|s| Object::String(s.clone().into())).collect())
+            },
+            Expression::Bool(Bool(b)) => Object::Bool(*b),
+            Expression::List(List(l)) => {
+                Object::List(l.iter().map(|expr| self.evaluate_expression(expr)).collect())
             },
         }
     }
