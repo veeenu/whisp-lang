@@ -28,6 +28,10 @@ raw_quoted_string_content = { (!("\"#") ~ ANY)* }
 
 unquoted_string = { (!(RESERVED | WHITESPACE) ~ ANY)+ }
 
+number = @{ int | float }
+int = @{ "-"? ~ ASCII_DIGIT+ }
+float = @{ "-"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT+ }
+
 formal_parameters = !{ "(" ~ (identifier ~ ",")* ~ (identifier ~ ","?)? ~ ")" }
 
 statement_block = !{
@@ -45,6 +49,7 @@ statement = !{
 expression = !{
   quoted_string |
   raw_quoted_string |
+  number |
   statement_block | 
   parenthesis_expression |
   function_call |
@@ -62,7 +67,7 @@ function_call = ${
 }
 
 function_arg = ${
-  unquoted_string | expression
+  expression
 }
 
 if_expr = ${

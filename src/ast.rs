@@ -101,6 +101,33 @@ pub struct RawQuotedString(#[pest_ast(inner(with(span_into_string)))] String);
 #[pest_ast(rule(Rule::unquoted_string))]
 pub struct UnquotedString(#[pest_ast(outer(with(span_into_string)))] String);
 
+#[derive(Debug, Clone, PartialEq, FromPest)]
+#[pest_ast(rule(Rule::number))]
+pub enum Number {
+    Int(Int),
+    Float(Float),
+}
+
+#[derive(Debug, Clone, PartialEq, FromPest)]
+#[pest_ast(rule(Rule::float))]
+pub struct Int(#[pest_ast(outer(with(Int::parse)))] i64);
+
+impl Int {
+    fn parse(span: Span) -> i64 {
+        span.as_str().parse().expect("Failed to parse float")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, FromPest)]
+#[pest_ast(rule(Rule::float))]
+pub struct Float(#[pest_ast(outer(with(Float::parse)))] f64);
+
+impl Float {
+    fn parse(span: Span) -> f64 {
+        span.as_str().parse().expect("Failed to parse float")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, FromPest)]
 #[pest_ast(rule(Rule::formal_parameters))]
 pub struct FormalParameters(pub Vec<Identifier>);
