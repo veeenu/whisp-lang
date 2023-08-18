@@ -114,8 +114,8 @@ impl Builtin {
         Object::Null
     }
 
-    fn call_check(&self, _arguments: Vec<Object>) -> Object {
-        Object::Bool(true)
+    fn call_check(&self, arguments: Vec<Object>) -> Object {
+        Object::Bool(arguments.iter().all(|arg| matches!(arg, Object::Bool(true))))
     }
 }
 
