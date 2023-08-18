@@ -73,13 +73,10 @@ function_call = ${
 }
 
 function_args = ${
-  (
-  "(" ~ WHITESPACE* ~ 
-    (expression ~ WHITESPACE* ~ "," ~ WHITESPACE*)* ~ 
-    (expression ~ WHITESPACE*)? ~ 
-  ")"
-  ) | ("(" ~ WHITESPACE* ~ ")")
+  (WHITESPACE* ~ expression ~ (WHITESPACE+ ~ expression)*) | empty_args
 }
+
+empty_args = _ { ("(" ~ WHITESPACE* ~ ")") }
 
 if_expr = ${
   if_cond ~

@@ -357,13 +357,13 @@ mod tests {
         p!(
             StatementBlock,
             Rule::statement_block,
-            "{ foo; bar (baz, quux); }",
+            "{ foo; bar baz quux; }",
             StatementBlock { tail: None, .. }
         );
         p!(
             StatementBlock,
             Rule::statement_block,
-            "{ foo; bar (baz, quux); quux }",
+            "{ foo; bar baz quux; quux() }",
             StatementBlock { tail: Some(_), .. }
         );
         p!(
@@ -399,19 +399,17 @@ mod tests {
         p!(Expression, Rule::expression, "r#\"foo\"#", Expression::String(s) if s.deref() == "foo");
         p!(Expression, Rule::expression, "{}", Expression::StatementBlock(_));
         p!(Expression, Rule::expression, "({})", Expression::ParenthesisExpression(_));
-        p!(Expression, Rule::expression, "run (foo, bar, baz);", Expression::FunctionCall(_));
+        p!(Expression, Rule::expression, "run foo bar baz;", Expression::FunctionCall(_));
         p!(Expression, Rule::expression, "if (foo) {}", Expression::IfExpr(_));
         p!(Expression, Rule::expression, "loop {}", Expression::Loop(_));
         p!(Expression, Rule::expression, "foo", Expression::Identifier(x) if x.0 == "foo");
         p!(ParenthesisExpression, Rule::parenthesis_expression, "(foo)", _);
         p!(FunctionCall, Rule::function_call, "foo()", _);
-        p!(FunctionCall, Rule::function_call, "foo(bar)", _);
-        p!(FunctionCall, Rule::function_call, "foo(bar, baz)", _);
+        p!(FunctionCall, Rule::function_call, "foo (bar)", _);
+        p!(FunctionCall, Rule::function_call, "foo bar baz", _);
         p!(FunctionArgs, Rule::function_args, "()", _);
-        p!(FunctionArgs, Rule::function_args, "(foo)", _);
-        p!(FunctionArgs, Rule::function_args, "(foo, bar)", _);
-        p!(FunctionArgs, Rule::function_args, "(foo, bar,)", _);
-        p!(FunctionArgs, Rule::function_args, "( foo,bar, )", _);
+        p!(FunctionArgs, Rule::function_args, "foo", _);
+        p!(FunctionArgs, Rule::function_args, "foo bar", _);
         p!(
             IfExpr,
             Rule::if_expr,

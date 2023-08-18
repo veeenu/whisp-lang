@@ -95,21 +95,21 @@ mod tests {
 
     #[test]
     fn test_function_call() {
-        parse(Rule::function_call, r#"print ([[Ciao, come stai?]])"#);
-        parse(Rule::function_call, r#"run ("git", "checkout", cur_branch)"#);
-        parse(Rule::function_call, r#"run ("git", "checkout", { cur_branch })"#);
-        parse(Rule::function_call, "run (r#\"git\"#, r#\"checkout\"#, { cur_branch })");
+        parse(Rule::function_call, r#"print [[Ciao, come stai?]]"#);
+        parse(Rule::function_call, r#"run "git" "checkout" cur_branch"#);
+        parse(Rule::function_call, r#"run "git" "checkout" { cur_branch }"#);
+        parse(Rule::function_call, "run r#\"git\"# r#\"checkout\"# cur_branch");
     }
 
     #[test]
     fn test_statement_block() {
         parse(Rule::statement_block, r#"{cur_branch;}"#);
-        parse(Rule::statement_block, r#"{run ([[git checkout main]]);}"#);
+        parse(Rule::statement_block, r#"{run [[git checkout main]];}"#);
         parse(Rule::statement_block, r#"{ cur_branch; }"#);
-        parse(Rule::statement_block, r#"{ run ([[git checkout main]]); }"#);
+        parse(Rule::statement_block, r#"{ run [[git checkout main]]; }"#);
         parse(Rule::statement_block, r#"{cur_branch}"#);
-        parse(Rule::statement_block, r#"{run ([[git checkout main]])}"#);
-        parse(Rule::statement_block, r#"{ run ([[git checkout main]]) }"#);
+        parse(Rule::statement_block, r#"{run [[git checkout main]]}"#);
+        parse(Rule::statement_block, r#"{ run [[git checkout main]] }"#);
         parse(Rule::statement_block, r#"{ cur_branch }"#);
         parse(Rule::statement_block, r#"{ fn foo() {} }"#);
         parse(Rule::statement_block, r#"{ fn foo() {} fn bar() {} foo; bar }"#);
@@ -149,7 +149,7 @@ mod tests {
                   foo;
               }
 
-              run ([[git rebase origin main]]);
+              run [[git rebase origin main]];
             }
             "#,
         );
@@ -163,7 +163,7 @@ mod tests {
                   foo;
               }
 
-              run ([[git rebase origin main]]);
+              run [[git rebase origin main]];
             }
             "#,
         );
@@ -174,30 +174,30 @@ mod tests {
         parse(
             Rule::if_expr,
             r#"
-            if (run (program1)) {
-                run (program2)
+            if (run program1) {
+                run program2
             }
             "#,
         );
         parse(
             Rule::if_expr,
             r#"
-            if (run (program1)) {
-                run (program2)
+            if (run program1) {
+                run program2
             } else {
-                run (program3)
+                run program3
             }
             "#,
         );
         parse(
             Rule::if_expr,
             r#"
-            if (run (program1)) {
-                run (program2)
-            } else if (run (program3)) {
-                run (program4)
+            if (run program1) {
+                run program2
+            } else if (run program3) {
+                run program4
             } else {
-                run (program5)
+                run program5
             }
             "#,
         );
@@ -205,12 +205,12 @@ mod tests {
             Rule::statement_block,
             r#"
             {
-                if (run (program1)) {
-                    run (program2)
+                if (run program1) {
+                    run program2
                 } else {
-                    run (program4)
-                } else if (run (program2)) {
-                    run (program5)
+                    run program4
+                } else if (run program2) {
+                    run program5
                 }
             }
             "#,
@@ -223,7 +223,7 @@ mod tests {
             Rule::loop_expr,
             r#"
             loop {
-                run (program3);
+                run program3;
                 break;
                 break foo;
                 break "foo";

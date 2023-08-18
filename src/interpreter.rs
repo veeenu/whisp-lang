@@ -416,23 +416,23 @@ mod tests {
             r#"
             fn main() {
                 let foo = (loop {
-                    print([[Ciao, come stai?]]);
+                    print [[Ciao, come stai?]];
                     break "ciao ciao";
                 });
 
                 if (check (foo)) {
-                    print("I should be printed");
+                    print "I should be printed";
                 } else {
-                    print("I shouldn't be printed");
+                    print "I shouldn't be printed";
                 };
 
                 if (foo) {
-                    print("I shouldn't be printed");
+                    print "I shouldn't be printed";
                 } else {
-                    print("I should be printed");
+                    print "I should be printed";
                 };
 
-                print ((foo), {foo})
+                print (foo) {foo}
             }
             "#,
         )
