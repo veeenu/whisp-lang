@@ -474,6 +474,20 @@ mod tests {
         p!(FunctionCall, Rule::function_call, "foo()", _);
         p!(FunctionCall, Rule::function_call, "foo (bar)", _);
         p!(FunctionCall, Rule::function_call, "foo bar baz", _);
+        p!(
+            FunctionCall,
+            Rule::function_call,
+            "foo.bar()",
+            FunctionCall { function_name, arguments: FunctionArgs(arguments) }
+            if function_name.0 == "bar" && arguments.len() == 1
+        );
+        p!(
+            FunctionCall,
+            Rule::function_call,
+            "foo.bar baz quux",
+            FunctionCall { function_name, arguments: FunctionArgs(arguments) }
+            if function_name.0 == "bar" && arguments.len() == 3
+        );
         p!(FunctionArgs, Rule::function_args, "()", _);
         p!(FunctionArgs, Rule::function_args, "foo", _);
         p!(FunctionArgs, Rule::function_args, "foo bar", _);
