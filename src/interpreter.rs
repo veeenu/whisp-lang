@@ -397,7 +397,7 @@ mod tests {
         let mut program = Interpreter::new(
             r#"
             fn main() {
-                print([[Ciao, come stai?]]);
+                print [[Ciao, come stai?]];
             }
             "#,
         )

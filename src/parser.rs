@@ -87,7 +87,7 @@ mod tests {
         parse(Rule::lexical_declaration, "let foo = bar;");
         parse(Rule::lexical_declaration, "let foo=bar;");
         parse(Rule::lexical_declaration, r#"let foo = "string";"#);
-        parse(Rule::lexical_declaration, r#"let foo = (run ([[git diff main..]]));"#);
+        parse(Rule::lexical_declaration, r#"let foo = (run [[git diff main..]]);"#);
         parse(Rule::lexical_declaration, r#"let foo = { bar; foo };"#);
         parse(Rule::lexical_declaration, r#"let foo = { bar; foo ;};"#);
         parse(Rule::lexical_declaration, r#"let foo = { bar; foo; };"#);

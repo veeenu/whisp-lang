@@ -2,12 +2,13 @@ use std::fmt::Debug;
 use std::ops::Deref;
 
 use from_pest::{ConversionError, FromPest, Void};
-use pest::{Parser, Span};
+use pest::{iterators::Pairs, Parser, Span};
 use pest_ast::FromPest;
 use thiserror::Error;
 
 use crate::parser::*;
 
+type StdResult<T, E> = std::result::Result<T, E>;
 type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Error, Debug)]
@@ -196,11 +197,48 @@ pub enum Expression {
 #[pest_ast(rule(Rule::parenthesis_expression))]
 pub struct ParenthesisExpression(pub Box<Expression>);
 
-#[derive(Debug, Clone, PartialEq, FromPest)]
-#[pest_ast(rule(Rule::function_call))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FunctionCall {
     function_name: Identifier,
     arguments: FunctionArgs,
+}
+
+impl<'pest> FromPest<'pest> for FunctionCall {
+    type Rule = Rule;
+    type FatalError = Void;
+
+    fn from_pest(
+        pest: &mut Pairs<'pest, Self::Rule>,
+    ) -> StdResult<Self, ConversionError<Self::FatalError>> {
+        let pest = &mut pest
+            .next()
+            .filter(|pair| pair.as_rule() == Rule::function_call)
+            .ok_or(ConversionError::NoMatch)?
+            .into_inner();
+
+        let (object, function_name) = {
+            let first_ident = Identifier::from_pest(pest)?;
+            let second_ident = Option::<Identifier>::from_pest(pest)?;
+            if let Some(second_ident) = second_ident {
+                (Some(first_ident), second_ident)
+            } else {
+                (None, first_ident)
+            }
+        };
+
+        let inner_arguments = FunctionArgs::from_pest(pest)?.0;
+        let arguments = match object {
+            Some(obj) => {
+                let mut v = Vec::with_capacity(inner_arguments.len() + 1);
+                v.push(Expression::Identifier(obj));
+                v.extend(inner_arguments);
+                FunctionArgs(v)
+            },
+            None => FunctionArgs(inner_arguments),
+        };
+
+        Ok(FunctionCall { function_name, arguments })
+    }
 }
 
 impl FunctionCall {
@@ -217,9 +255,38 @@ impl FunctionCall {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, FromPest)]
-#[pest_ast(rule(Rule::function_args))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FunctionArgs(Vec<Expression>);
+
+impl<'pest> FromPest<'pest> for FunctionArgs {
+    type Rule = Rule;
+    type FatalError = Void;
+
+    fn from_pest(
+        pest: &mut Pairs<'pest, Self::Rule>,
+    ) -> StdResult<Self, ConversionError<Self::FatalError>> {
+        let pest = &mut pest
+            .next()
+            .filter(|pair| pair.as_rule() == Rule::function_args)
+            .ok_or(ConversionError::NoMatch)?
+            .into_inner();
+
+        let mut args = Vec::new();
+
+        loop {
+            let rule = pest.peek().map(|p| p.as_rule());
+            let expr = match rule {
+                Some(Rule::identifier) => Expression::Identifier(Identifier::from_pest(pest)?),
+                Some(Rule::expression) => Expression::from_pest(pest)?,
+                None => break,
+                x => unreachable!("{x:?}"),
+            };
+            args.push(expr);
+        }
+
+        Ok(FunctionArgs(args))
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, FromPest)]
 #[pest_ast(rule(Rule::if_expr))]
@@ -270,7 +337,7 @@ impl<'pest> FromPest<'pest> for WhispString {
 
     fn from_pest(
         pest: &mut pest::iterators::Pairs<'pest, Self::Rule>,
-    ) -> std::result::Result<Self, ConversionError<Self::FatalError>> {
+    ) -> StdResult<Self, ConversionError<Self::FatalError>> {
         if let Ok(quoted_string) = QuotedString::from_pest(pest) {
             Ok(WhispString::from(quoted_string))
         } else if let Ok(raw_quoted_string) = RawQuotedString::from_pest(pest) {
